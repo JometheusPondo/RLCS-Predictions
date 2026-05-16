@@ -45,7 +45,23 @@ RUN go mod download
 COPY . .
 COPY --from=frontend /app/web/dist ./web/dist
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /server ./cmd/server
+# Memory-constrained build. modernc.org/sqlite/lib is a machine-generated
+# pure-Go translation of all of SQLite and is one of the heaviest compiles in
+# the Go ecosystem — on a small build host (≈1 GB RAM) the compiler gets
+# OOM-killed ("signal: killed").
+#
+#   GOGC=20      collect at 20% heap growth instead of the default 100% —
+#                trades build speed for a much lower peak RSS.
+#   GOMAXPROCS=1 caps the compiler's internal parallelism so it isn't holding
+#                several function compilations resident at once.
+#   -p=1         compile one package at a time — no big package compiles
+#                concurrently with another.
+#
+# Together these drop the peak from ~2.5–3 GB to well under 1 GB. The build is
+# slower but fits in a small instance's RAM. If the build host is large,
+# these settings only cost some wall-clock time and are otherwise harmless.
+RUN GOGC=20 GOMAXPROCS=1 CGO_ENABLED=0 GOOS=linux \
+    go build -p=1 -ldflags="-s -w" -o /server ./cmd/server
 
 # ---- Stage 3: runtime ----
 FROM gcr.io/distroless/static-debian12
