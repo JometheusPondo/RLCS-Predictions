@@ -61,7 +61,11 @@ func NewRouter(d Deps) http.Handler {
 		r.Post("/login", s.login)
 
 		r.Get("/participants", s.listParticipants)
-		r.Post("/participants", s.createParticipant)
+		// Self-registration is disabled for now: accounts are provisioned by
+		// the operator directly. The createParticipant handler is intentionally
+		// left in place — re-register this route (and re-add the create UI in
+		// LandingPage.tsx) when an approval flow is built.
+		//   r.Post("/participants", s.createParticipant)
 		r.Get("/participants/{id}", s.getParticipant)
 		r.Put("/participants/{id}/winner", s.setWinnerPick)
 		r.Put("/participants/{id}/predictions/{match_id}", s.setPrediction)

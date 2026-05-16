@@ -78,6 +78,9 @@ export const api = {
   getParticipant: (id: string): Promise<ParticipantWithPredictions> =>
     request<ParticipantWithPredictions>(`/participants/${encodeURIComponent(id)}`),
 
+  // NOTE: self-registration is currently disabled — POST /api/participants is
+  // not registered on the backend, so calling this will 404. Kept for when an
+  // approval flow is built; see the router and LandingPage for the other half.
   createParticipant: (display_name: string): Promise<Participant> =>
     request<Participant>('/participants', {
       method: 'POST',
