@@ -68,8 +68,10 @@ type ParticipantWithPredictions struct {
 }
 
 // AdminID is the backstage reference account. It can authenticate and read
-// everything, but is filtered out of the public participant list and the
-// leaderboard. Identified by id string — no is_admin column.
+// everything, but it is NOT a participant: it is filtered out of the public
+// participant list and the leaderboard, it earns no score, and its
+// predictions (if any) are excluded from scoring — including the underdog
+// pick-count tally.
 const AdminID = "blast_admin"
 
 // Tournament is internal-facing; not currently returned by any API endpoint.
@@ -104,6 +106,12 @@ type Round struct {
 // Slot is the intra-day position string from the sheet ("2A", "5B") for
 // SheetSource rows; Liquipedia rows leave this nil and use ScheduledAt
 // instead.
+//
+// Locked is a COMPUTED field, not stored in the DB. The db layer sets it on
+// every match returned by ListMatches: true means predictions on this match
+// are locked (the day's lock time has passed, or — on the final day — the
+// match has started, or the match is completed). The frontend uses it to
+// gate tappability; the server also enforces it independently on writes.
 type Match struct {
 	ID           string  `json:"id"`
 	Round        Round   `json:"round"`
@@ -117,6 +125,7 @@ type Match struct {
 	PlaceholderA *string `json:"placeholder_a"`
 	PlaceholderB *string `json:"placeholder_b"`
 	Slot         *string `json:"slot"`
+	Locked       bool    `json:"locked"`
 }
 
 // SyncStatus is the shape returned by GET /api/sync/status.

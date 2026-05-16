@@ -167,6 +167,7 @@ func buildMatchSource(cfg *config.Config, tournament *models.Tournament, logger 
 			SpreadsheetID: cfg.SheetSpreadsheetID,
 			GroupsGID:     cfg.SheetGroupsGID,
 			BracketGID:    cfg.SheetBracketGID,
+			ScheduleGID:   cfg.SheetScheduleGID,
 			TournamentID:  tournament.ID,
 			Logger:        logger.With("component", "sheet-source"),
 		})

@@ -329,8 +329,8 @@ func (s *server) setPrediction(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "participant or match not found")
-	case errors.Is(err, db.ErrMatchCompleted):
-		writeError(w, http.StatusBadRequest, "match_completed", "match is completed; predictions are locked")
+	case errors.Is(err, db.ErrPredictionsLocked):
+		writeError(w, http.StatusBadRequest, "predictions_locked", "predictions for this match are locked")
 	case err != nil:
 		s.serverError(w, r, err)
 	default:
@@ -351,8 +351,8 @@ func (s *server) deletePrediction(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "prediction, participant, or match not found")
-	case errors.Is(err, db.ErrMatchCompleted):
-		writeError(w, http.StatusBadRequest, "match_completed", "match is completed; predictions are locked")
+	case errors.Is(err, db.ErrPredictionsLocked):
+		writeError(w, http.StatusBadRequest, "predictions_locked", "predictions for this match are locked")
 	case err != nil:
 		s.serverError(w, r, err)
 	default:

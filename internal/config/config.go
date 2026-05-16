@@ -24,7 +24,7 @@ type Config struct {
 
 	// MatchSource is the active source for tournament data. Either
 	// "liquipedia" (HTML scrape via MediaWiki API) or "sheet" (CSV export
-	// of two Google Sheets tabs). Default "liquipedia" keeps existing
+	// of Google Sheets tabs). Default "liquipedia" keeps existing
 	// installations on the original behavior.
 	//
 	// Switching mid-tournament orphans existing predictions: the two
@@ -40,9 +40,14 @@ type Config struct {
 
 	// Sheet-specific. Required when MatchSource == "sheet". The spreadsheet
 	// must be shared "Anyone with the link can view" — no auth is performed.
+	//
+	// SheetScheduleGID points at the Overall Schedule tab; it's optional —
+	// when empty, matches keep day-granularity start times and the locking
+	// layer falls back to per-match locking for days without published times.
 	SheetSpreadsheetID string
 	SheetGroupsGID     string
 	SheetBracketGID    string
+	SheetScheduleGID   string
 	SheetPollInterval  time.Duration
 
 	// DevMode gates dev-only routes like POST /api/sync/now. Off by default;
@@ -67,10 +72,11 @@ func Load() (*Config, error) {
 
 		// Defaults for the Paris Major broadcast LOP spreadsheet (verified
 		// against the public copy on 2026-05-15). If the operator points at
-		// a different sheet, all three IDs must be overridden together.
+		// a different sheet, all the IDs must be overridden together.
 		SheetSpreadsheetID: getEnv("SHEET_SPREADSHEET_ID", "1Eo3OEO8CY048BTz8QFmWG-xczH6UOecjFCFZCJQuLUs"),
 		SheetGroupsGID:     getEnv("SHEET_GROUPS_GID", "10266191"),
 		SheetBracketGID:    getEnv("SHEET_BRACKET_GID", "936433744"),
+		SheetScheduleGID:   getEnv("SHEET_SCHEDULE_GID", "1663218581"),
 	}
 
 	interval, err := time.ParseDuration(getEnv("LIQUIPEDIA_POLL_INTERVAL", "5m"))

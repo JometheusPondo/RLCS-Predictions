@@ -55,7 +55,15 @@ export interface Match {
   team_b_score: number | null;
   winner: Pick | null;
   status: MatchStatus;
-  scheduled_at: string | null; // RFC3339, or null when Liquipedia hasn't published a time
+  // RFC3339. The real published start time when the broadcast schedule has
+  // one; otherwise the match's day at 00:00:00Z (date known, start time not
+  // yet published). Null only if the source announced no date at all.
+  scheduled_at: string | null;
+  // Computed server-side: true when predictions on this match are locked
+  // (the day's lock time has passed, the match has started on the final day,
+  // or the match is completed). The server enforces this independently; the
+  // UI uses it to gate tappability.
+  locked: boolean;
 }
 
 export interface SyncStatus {

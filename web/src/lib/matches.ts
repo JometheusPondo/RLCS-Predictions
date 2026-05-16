@@ -55,17 +55,23 @@ export interface SideState {
 // sideState computes the visual treatment + interactivity for one side of a
 // match card. Direct implementation of the table in spec § 7.2:
 //
-//   upcoming/live, not picked → neutral, tappable
-//   upcoming/live, picked     → blue, tappable (tap again to clear)
-//   completed,    picked+won  → green, locked
-//   completed,    picked+lost → red, locked
-//   completed,    won (unpicked) → winner-outline, locked
-//   completed,    other       → neutral, locked
+//   open,      not picked → neutral, tappable
+//   open,      picked     → blue, tappable (tap again to clear)
+//   locked,    not picked → neutral, locked
+//   locked,    picked     → blue, locked
+//   completed, picked+won  → green, locked
+//   completed, picked+lost → red, locked
+//   completed, won (unpicked) → winner-outline, locked
+//   completed, other       → neutral, locked
+//
+// "Locked" (Match.locked) is computed server-side: a match's day-lock time
+// has passed, or — on the final day — the match has started. A locked match
+// keeps showing the user's pick but can no longer be changed.
 export function sideState(side: Pick, match: Match, userPick: Pick | null): SideState {
   const completed = match.status === 'completed';
 
   if (!completed) {
-    return { visual: userPick === side ? 'blue' : 'neutral', tappable: true };
+    return { visual: userPick === side ? 'blue' : 'neutral', tappable: !match.locked };
   }
 
   const thisSideWon = match.winner === side;

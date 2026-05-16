@@ -4,9 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/jometheuspondo/rlcs-predictions/internal/locking"
 	"github.com/jometheuspondo/rlcs-predictions/internal/models"
+	"github.com/jometheuspondo/rlcs-predictions/internal/scoring"
 )
 
 // Sentinel errors returned by query functions. Callers (API handlers, the
@@ -18,34 +22,30 @@ var (
 	// ErrIDConflict is returned by CreateParticipant when the derived id already exists.
 	ErrIDConflict = errors.New("id conflict")
 
-	// ErrMatchCompleted is returned when a prediction write/delete targets a completed match.
-	// Spec § 6: predictions lock once a match completes; server-side enforcement, not just UI.
-	ErrMatchCompleted = errors.New("match completed; predictions locked")
+	// ErrPredictionsLocked is returned when a prediction write/delete targets a
+	// match whose predictions are locked — the match has completed, or the
+	// day's lock time has passed, or (on the final day) the match has started.
+	// Server-side enforcement; the frontend also gates this via Match.Locked.
+	ErrPredictionsLocked = errors.New("predictions are locked for this match")
 )
 
 // =============================================================================
 // Participants
 // =============================================================================
 
-// ListParticipants returns every participant with their computed score
-// (correct picks on completed matches only) and their winner-pick history.
-// Sorted score DESC, name ASC.
+// ListParticipants returns every participant with their computed score and
+// winner-pick history, sorted score DESC then name ASC.
 //
 // This includes the blast_admin backstage account — it must be selectable in
 // the landing-page dropdown so the operator can log in. Excluding it from the
 // leaderboard is the leaderboard's job (it filters AdminID out client-side),
-// not this query's.
+// and the scoring layer excludes its predictions, so its score is always 0.
+//
+// Scores are computed in Go (see internal/scoring) rather than in SQL: the
+// rules — a 4-way branch plus an underdog cross-participant pick count — don't
+// fit a readable inline query.
 func (db *DB) ListParticipants(ctx context.Context) ([]models.Participant, error) {
-	const q = `
-		SELECT p.id, p.display_name,
-		       COALESCE(SUM(CASE WHEN m.winner = pr.pick THEN 1 ELSE 0 END), 0) AS score
-		FROM participants p
-		LEFT JOIN predictions pr ON pr.participant_id = p.id
-		LEFT JOIN matches m ON m.id = pr.match_id AND m.status = 'completed'
-		GROUP BY p.id, p.display_name
-		ORDER BY score DESC, p.display_name ASC
-	`
-	rows, err := db.QueryContext(ctx, q)
+	rows, err := db.QueryContext(ctx, `SELECT id, display_name FROM participants`)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (db *DB) ListParticipants(ctx context.Context) ([]models.Participant, error
 	out := make([]models.Participant, 0)
 	for rows.Next() {
 		var p models.Participant
-		if err := rows.Scan(&p.ID, &p.DisplayName, &p.Score); err != nil {
+		if err := rows.Scan(&p.ID, &p.DisplayName); err != nil {
 			return nil, err
 		}
 		p.WinnerPicks = []models.WinnerPick{}
@@ -62,6 +62,14 @@ func (db *DB) ListParticipants(ctx context.Context) ([]models.Participant, error
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	scores, err := db.computeAllScores(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Score = scores[out[i].ID]
 	}
 
 	// Attach winner-pick history. One query for all of it, grouped in Go —
@@ -75,6 +83,15 @@ func (db *DB) ListParticipants(ctx context.Context) ([]models.Participant, error
 			out[i].WinnerPicks = ps
 		}
 	}
+
+	// Leaderboard order: score desc, then display name asc.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Score != out[j].Score {
+			return out[i].Score > out[j].Score
+		}
+		return out[i].DisplayName < out[j].DisplayName
+	})
+
 	return out, nil
 }
 
@@ -188,9 +205,9 @@ func (db *DB) CreateParticipant(ctx context.Context, id, displayName string) (*m
 	}, nil
 }
 
-// GetParticipantWithPredictions returns a participant with their computed score,
-// every prediction they've made, and their winner-pick history. Returns
-// ErrNotFound if no such participant.
+// GetParticipantWithPredictions returns a participant with their computed
+// score, every prediction they've made, and their winner-pick history.
+// Returns ErrNotFound if no such participant.
 //
 // This returns ALL predictions unconditionally — permission filtering (hiding
 // in-progress picks from other users) is the handler's job, since only the
@@ -198,16 +215,9 @@ func (db *DB) CreateParticipant(ctx context.Context, id, displayName string) (*m
 // though it's excluded from ListParticipants.
 func (db *DB) GetParticipantWithPredictions(ctx context.Context, id string) (*models.ParticipantWithPredictions, error) {
 	var pwp models.ParticipantWithPredictions
-	err := db.QueryRowContext(ctx, `
-		SELECT p.id, p.display_name,
-		       COALESCE(SUM(CASE WHEN m.winner = pr.pick THEN 1 ELSE 0 END), 0) AS score
-		FROM participants p
-		LEFT JOIN predictions pr ON pr.participant_id = p.id
-		LEFT JOIN matches m ON m.id = pr.match_id AND m.status = 'completed'
-		WHERE p.id = ?
-		GROUP BY p.id, p.display_name
-	`, id).Scan(&pwp.ID, &pwp.DisplayName, &pwp.Score)
-
+	err := db.QueryRowContext(ctx,
+		`SELECT id, display_name FROM participants WHERE id = ?`, id,
+	).Scan(&pwp.ID, &pwp.DisplayName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -236,6 +246,14 @@ func (db *DB) GetParticipantWithPredictions(ctx context.Context, id string) (*mo
 		return nil, err
 	}
 
+	// Score needs the global picture (the underdog rule counts across all
+	// participants), so it's the same computation as the leaderboard.
+	scores, err := db.computeAllScores(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pwp.Score = scores[id]
+
 	picks, err := db.winnerPicksFor(ctx, id)
 	if err != nil {
 		return nil, err
@@ -243,6 +261,51 @@ func (db *DB) GetParticipantWithPredictions(ctx context.Context, id string) (*mo
 	pwp.WinnerPicks = picks
 
 	return &pwp, nil
+}
+
+// =============================================================================
+// Scoring
+// =============================================================================
+
+// computeAllScores returns participant_id → total score, applying the scoring
+// rules in internal/scoring. The underdog rule needs the full cross-
+// participant pick distribution, so even a single participant's score is
+// derived from the global data set.
+func (db *DB) computeAllScores(ctx context.Context) (map[string]int, error) {
+	matches, err := db.ListMatches(ctx)
+	if err != nil {
+		return nil, err
+	}
+	preds, err := db.scoringPredictions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return scoring.ComputeScores(matches, preds), nil
+}
+
+// scoringPredictions returns every prediction as a scoring.PredictionRow,
+// EXCLUDING the blast_admin account. blast_admin is not a participant: its
+// predictions must neither earn points nor count toward anyone's underdog
+// tally, so they are filtered out before scoring ever sees them.
+func (db *DB) scoringPredictions(ctx context.Context) ([]scoring.PredictionRow, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT participant_id, match_id, pick FROM predictions WHERE participant_id != ?`,
+		models.AdminID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]scoring.PredictionRow, 0)
+	for rows.Next() {
+		var r scoring.PredictionRow
+		if err := rows.Scan(&r.ParticipantID, &r.MatchID, &r.Pick); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // =============================================================================
@@ -259,13 +322,14 @@ const matchSelectColumns = `
 	r.id, r.stage, r.sort_order, r.name
 `
 
-// scanMatch reads one row from a SELECT that uses matchSelectColumns. The
-// scanner interface accepts both *sql.Row and *sql.Rows so this works for
+// rowScanner accepts both *sql.Row and *sql.Rows so scanMatch works for
 // QueryRowContext and QueryContext.
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
+// scanMatch reads one row from a SELECT that uses matchSelectColumns. It does
+// NOT set Match.Locked — that is a computed field, populated by ListMatches.
 func scanMatch(s rowScanner, m *models.Match) error {
 	return s.Scan(
 		&m.ID, &m.TeamA, &m.TeamB, &m.TeamAScore, &m.TeamBScore,
@@ -276,7 +340,13 @@ func scanMatch(s rowScanner, m *models.Match) error {
 }
 
 // ListMatches returns every match joined with its round, sorted by
-// round.sort_order ASC then match id ASC (deterministic insertion order via id).
+// round.sort_order ASC then match id ASC, with the computed Locked flag set
+// on each.
+//
+// Locking is data-driven (see internal/locking): the lock schedule — each
+// day's lock time and which date is the final, per-match day — is derived
+// from the match set itself, so ListMatches is the single source of truth for
+// Match.Locked.
 func (db *DB) ListMatches(ctx context.Context) ([]models.Match, error) {
 	q := `
 		SELECT ` + matchSelectColumns + `
@@ -298,11 +368,24 @@ func (db *DB) ListMatches(ctx context.Context) ([]models.Match, error) {
 		}
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	sched := locking.BuildSchedule(out)
+	now := time.Now()
+	for i := range out {
+		out[i].Locked = sched.IsLocked(out[i], now)
+	}
+	return out, nil
 }
 
 // GetMatch returns a single match by id with its round joined.
-// Used by handlers to validate match existence and status before mutating predictions.
+//
+// NOTE: the returned match's Locked field is always false — a meaningful lock
+// state needs the whole tournament (day windows, final-day detection), which
+// GetMatch does not load. Use ListMatches when Locked matters; GetMatch exists
+// for callers (the syncer) that don't care about it.
 func (db *DB) GetMatch(ctx context.Context, id string) (*models.Match, error) {
 	var m models.Match
 	q := `
@@ -434,10 +517,10 @@ func (db *DB) UpdateLastSyncedAt(ctx context.Context, tournamentID int, syncedAt
 // Predictions
 // =============================================================================
 
-// SetPrediction upserts a prediction. Validates that the match exists and is
-// not yet completed (predictions lock on completion per spec § 6). Returns
+// SetPrediction upserts a prediction. Validates that the match exists and that
+// its predictions are not locked (see checkPredictionWriteable). Returns
 // ErrNotFound if either the participant or the match is missing, or
-// ErrMatchCompleted if the match has finalised.
+// ErrPredictionsLocked if the match's predictions have locked.
 func (db *DB) SetPrediction(ctx context.Context, participantID, matchID, pick string) error {
 	if err := db.checkPredictionWriteable(ctx, participantID, matchID); err != nil {
 		return err
@@ -477,19 +560,29 @@ func (db *DB) DeletePrediction(ctx context.Context, participantID, matchID strin
 	return nil
 }
 
-// checkPredictionWriteable validates that both the match and participant exist,
-// and that the match has not yet completed.
+// checkPredictionWriteable validates that both the match and participant
+// exist, and that the match's predictions are not locked.
+//
+// The lock decision is taken straight from ListMatches, which computes
+// Match.Locked — so server-side enforcement and the Locked flag the frontend
+// sees can never disagree.
 func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, matchID string) error {
-	var status string
-	err := db.QueryRowContext(ctx, `SELECT status FROM matches WHERE id = ?`, matchID).Scan(&status)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
-	}
+	matches, err := db.ListMatches(ctx)
 	if err != nil {
 		return err
 	}
-	if status == models.StatusCompleted {
-		return ErrMatchCompleted
+	var match *models.Match
+	for i := range matches {
+		if matches[i].ID == matchID {
+			match = &matches[i]
+			break
+		}
+	}
+	if match == nil {
+		return ErrNotFound
+	}
+	if match.Locked {
+		return ErrPredictionsLocked
 	}
 
 	var exists int

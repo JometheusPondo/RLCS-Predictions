@@ -16,42 +16,47 @@ import (
 	"github.com/jometheuspondo/rlcs-predictions/internal/models"
 )
 
-// SheetSource fetches tournament match data from two public Google Sheets
-// tabs (Groups Output and Bracket Output) via the docs.google.com CSV export
-// endpoint. No auth — the sheet must be Viewer-shared with "anyone with the
-// link".
+// SheetSource fetches tournament match data from public Google Sheets tabs via
+// the docs.google.com CSV export endpoint. No auth — the sheet must be
+// Viewer-shared with "anyone with the link".
 //
-// The two tabs together encode the entire tournament:
+// Three tabs are consumed:
 //
 //   - Groups Output: 4 group blocks × 3 rounds × 2 matches = 24 group matches.
-//     Each match cell carries label (A–X), team_name, br_id (1–16),
-//     score, and slot string ("Day 1 2A").
+//     Each match cell carries label (A–X), team_name, br_id (1–16), score,
+//     and slot string ("Day 1 2A").
 //
-//   - Bracket Output: 5 round columns × variable matches = 13 bracket
-//     matches (labels A–M). Each cell carries the same fields, but until
-//     teams resolve, team_name is a placeholder like "Group A First" or
-//     "Winner of C" and br_id is "#N/A" or a placeholder echo.
+//   - Bracket Output: 5 round columns = 13 bracket matches (labels A–M). Same
+//     cell shape, but until teams resolve, team_name is a placeholder like
+//     "Group A First" / "Winner of C" and br_id is "#N/A" or a placeholder echo.
+//
+//   - Overall Schedule (optional): a flat row-per-match table with published
+//     CET start times. SheetSource overlays these onto the match list so the
+//     locking layer can day-lock from real times. A failure to fetch or parse
+//     this tab is non-fatal — matches simply keep day-granularity ScheduledAt.
 //
 // Match IDs are hash(tournament_id | stage | label) — stable across the
-// placeholder-to-real-team transition. NOTE: this is a different id space
-// from the Liquipedia adapter's hash, so switching MATCH_SOURCE mid-
-// tournament will orphan existing predictions (they're keyed by match_id).
-// One-way switch.
+// placeholder-to-real-team transition. NOTE: this is a different id space from
+// the Liquipedia adapter's hash, so switching MATCH_SOURCE mid-tournament will
+// orphan existing predictions (they're keyed by match_id). One-way switch.
 type SheetSource struct {
 	httpClient    *http.Client
 	spreadsheetID string
 	groupsGID     string
 	bracketGID    string
+	scheduleGID   string // optional; empty disables the start-time overlay
 	tournamentID  int
 	logger        *slog.Logger
 }
 
-// SheetSourceOptions configures a SheetSource. All fields are required except
-// HTTPClient (defaults to 30s timeout) and Logger (defaults to slog.Default).
+// SheetSourceOptions configures a SheetSource. SpreadsheetID, GroupsGID, and
+// BracketGID are required. ScheduleGID is optional — when empty, matches keep
+// day-granularity start times. HTTPClient and Logger default if unset.
 type SheetSourceOptions struct {
 	SpreadsheetID string
 	GroupsGID     string
 	BracketGID    string
+	ScheduleGID   string
 	TournamentID  int
 	HTTPClient    *http.Client
 	Logger        *slog.Logger
@@ -84,14 +89,19 @@ func NewSheetSource(opts SheetSourceOptions) (*SheetSource, error) {
 		spreadsheetID: opts.SpreadsheetID,
 		groupsGID:     opts.GroupsGID,
 		bracketGID:    opts.BracketGID,
+		scheduleGID:   opts.ScheduleGID,
 		tournamentID:  opts.TournamentID,
 		logger:        logger,
 	}, nil
 }
 
-// FetchMatches fetches both tabs in sequence and merges the parsed matches.
-// A failure on either tab fails the whole call — partial data would leave
-// the UI in an inconsistent state (e.g., matches without rounds).
+// FetchMatches fetches the Groups and Bracket tabs, merges the parsed matches,
+// then overlays real start times from the Overall Schedule tab.
+//
+// A failure on the Groups or Bracket tab fails the whole call — partial data
+// would leave the UI inconsistent. A failure on the Schedule tab is logged and
+// ignored: matches keep day-granularity ScheduledAt, and the locking layer
+// falls back to per-match locking for any day without real times.
 func (s *SheetSource) FetchMatches(ctx context.Context) ([]models.Match, error) {
 	groupsCSV, err := s.fetchCSV(ctx, s.groupsGID)
 	if err != nil {
@@ -114,7 +124,43 @@ func (s *SheetSource) FetchMatches(ctx context.Context) ([]models.Match, error) 
 	out := make([]models.Match, 0, len(groupMatches)+len(bracketMatches))
 	out = append(out, groupMatches...)
 	out = append(out, bracketMatches...)
+
+	s.applyScheduleOverlay(ctx, out)
+
 	return out, nil
+}
+
+// applyScheduleOverlay best-effort fetches the Overall Schedule tab and
+// replaces day-granularity ScheduledAt values with real published start times
+// where available. Non-fatal: any failure is logged and the matches are left
+// with their day-granularity times.
+func (s *SheetSource) applyScheduleOverlay(ctx context.Context, matches []models.Match) {
+	if s.scheduleGID == "" {
+		return
+	}
+
+	scheduleCSV, err := s.fetchCSV(ctx, s.scheduleGID)
+	if err != nil {
+		s.logger.Warn("schedule tab fetch failed; using day-granularity start times", "err", err)
+		return
+	}
+
+	startByID, err := parseScheduleCSV(scheduleCSV, s.tournamentID)
+	if err != nil {
+		s.logger.Warn("schedule tab parse failed; using day-granularity start times", "err", err)
+		return
+	}
+
+	applied := 0
+	for i := range matches {
+		if start, ok := startByID[matches[i].ID]; ok {
+			start := start // capture for &
+			matches[i].ScheduledAt = &start
+			applied++
+		}
+	}
+	s.logger.Debug("applied published start times from schedule tab",
+		"matched", applied, "total", len(matches))
 }
 
 // fetchCSV pulls one tab as CSV from the docs.google.com export endpoint.
@@ -189,9 +235,11 @@ func isResolvedTeamCell(brID string) bool {
 // dayDates maps the sheet's "Day N" prefix to a calendar date for the match.
 // The intra-day position ("2A", "5B") is kept separately in models.Match.Slot.
 //
-// Dates are RFC3339 at midnight UTC; the broadcaster's day-level granularity
-// is what the sheet records, so a fake "00:00:00Z" is the honest
-// representation rather than inventing a per-slot wall-clock time.
+// Dates are RFC3339 at midnight UTC. This is the FALLBACK granularity: when
+// the Overall Schedule tab has a published wall-clock start for a match,
+// applyScheduleOverlay replaces ScheduledAt with that real time. A match left
+// at 00:00:00 UTC therefore means "start time not yet published" — the
+// locking layer treats midnight UTC as that sentinel.
 var dayDates = map[string]string{
 	"Day 1": "2026-05-20T00:00:00Z",
 	"Day 2": "2026-05-21T00:00:00Z",
