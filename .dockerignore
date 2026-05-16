@@ -1,0 +1,15 @@
+# Keep the Docker build context small and deterministic. The frontend is
+# rebuilt inside stage 1, the Go binary inside stage 2 — local artifacts must
+# not leak in.
+.git
+web/node_modules
+web/dist
+bin
+data
+tmp
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+.env
+last_response.html

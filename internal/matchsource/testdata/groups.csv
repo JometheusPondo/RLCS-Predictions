@@ -1,0 +1,34 @@
+,MAJOR 2 GROUP STAGE,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,Stage 1 - Groups,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,FALSE,Group A Not Complete,,,GROUP A,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,Place,Team,Record,G. Rec,Diff,Seed,,Round 1,,,,,,Round 2,,,,,,Round 3,,,,,,Team Results,br,VIT,KC,WC,FUT,,M Win,M Loss,G Win,G Loss,Diff,M Left
+,,,A1,Team Vitality,0-0,0-0,0,EU1,,I,Wildcard Gaming,12,0,Day 1 2A,,Q,Karmine Corp,16,0,Day 1 6A,,A,Team Vitality,5,0,Day 2 4B,,Team Vitality,5,,,,,,0,0,0,0,0,3
+,,,A2,Karmine Corp,0-0,0-0,0,EU4,,,Team Vitality,5,0,,,,Team Vitality,5,0,,,,FUT Esports,1,0,,,Karmine Corp,16,,,,,,0,0,0,0,0,3
+,,,A3,Wildcard Gaming,0-0,0-0,0,OCE1,,J,Karmine Corp,16,0,Day 1 2B,,R,Wildcard Gaming,12,0,Day 1 6B,,B,Karmine Corp,16,0,Day 2 4A,,Wildcard Gaming,12,,,,,,0,0,0,0,0,3
+,,,A4,FUT Esports,0-0,0-0,0,NA4,,,FUT Esports,1,0,,,,FUT Esports,1,0,,,,Wildcard Gaming,12,0,,,FUT Esports,1,,,,,,0,0,0,0,0,3
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,FALSE,Group B Not Complete,,,GROUP B,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,Place,Team,Record,G. Rec,Diff,Seed,,Round 1,,,,,,Round 2,,,,,,Round 3,,,,,,Team Results,br,NRG,MIBR,MCFC,5F,,M Win,M Loss,G Win,G Loss,Diff,M Left
+,,,B1,NRG,0-0,0-0,0,NA1,,C,Five Fears,15,0,Day 1 1B,,S,Made In Brazil,8,0,Day 1 5A,,K,Manchester City,13,0,Day 2 3A,,NRG,2,,,,,,0,0,0,0,0,3
+,,,B2,Made In Brazil,0-0,0-0,0,SAM1,,,NRG,2,0,,,,NRG,2,0,,,,NRG,2,0,,,Made In Brazil,8,,,,,,0,0,0,0,0,3
+,,,B3,Manchester City,0-0,0-0,0,EU5,,D,Manchester City,13,0,Day 1 1A,,T,Five Fears,15,0,Day 1 5B,,L,Five Fears,15,0,Day 2 3B,,Manchester City,13,,,,,,0,0,0,0,0,3
+,,,B4,Five Fears,0-0,0-0,0,SSA1,,,Made In Brazil,8,0,,,,Manchester City,13,0,,,,Made In Brazil,8,0,,,Five Fears,15,,,,,,0,0,0,0,0,3
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,FALSE,Group C Not Complete,,,GROUP C,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,Place,Team,Record,G. Rec,Diff,Seed,,Round 1,,,,,,Round 2,,,,,,Round 3,,,,,,Team Results,br,TWIS,NIP,SR,TSM,,M Win,M Loss,G Win,G Loss,Diff,M Left
+,,,C1,Twisted Minds,0-0,0-0,0,MENA1,,M,Twisted Minds,10,0,Day 1 4A,,E,Twisted Minds,10,0,Day 2 1B,,U,Ninjas in Pyjamas,11,0,Day 2 5A,,Twisted Minds,10,,,,,,0,0,0,0,0,3
+,,,C2,Ninjas in Pyjamas,0-0,0-0,0,EU3,,,Shopify Rebellion,7,0,,,,TSM,4,0,,,,Twisted Minds,10,0,,,Ninjas in Pyjamas,11,,,,,,0,0,0,0,0,3
+,,,C3,Shopify Rebellion,0-0,0-0,0,NA3,,N,Ninjas in Pyjamas,11,0,Day 1 4B,,F,Ninjas in Pyjamas,11,0,Day 2 1A,,V,Shopify Rebellion,7,0,Day 2 5B,,Shopify Rebellion,7,,,,,,0,0,0,0,0,3
+,,,C4,TSM,0-0,0-0,0,APAC1,,,TSM,4,0,,,,Shopify Rebellion,7,0,,,,TSM,4,0,,,TSM,4,,,,,,0,0,0,0,0,3
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,FALSE,Group D Not Complete,,,GROUP D,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,Place,Team,Record,G. Rec,Diff,Seed,,Round 1,,,,,,Round 2,,,,,,Round 3,,,,,,Team Results,br,M8,SSG,R8,FUR,,M Win,M Loss,G Win,G Loss,Diff,M Left
+,,,D1,Gentle Mates,0-0,0-0,0,EU2,,G,FURIA,9,0,Day 1 3B,,O,R8 Esports,14,0,Day 2 2A,,W,Gentle Mates,6,0,Day 2 6A,,Gentle Mates,6,,,,,,0,0,0,0,0,3
+,,,D2,Spacestation Gaming,0-0,0-0,0,NA2,,,Gentle Mates,6,0,,,,Gentle Mates,6,0,,,,Spacestation Gaming,3,0,,,Spacestation Gaming,3,,,,,,0,0,0,0,0,3
+,,,D3,R8 Esports,0-0,0-0,0,MENA2,,H,R8 Esports,14,0,Day 1 3A,,P,FURIA,9,0,Day 2 2B,,X,R8 Esports,14,0,Day 2 6B,,R8 Esports,14,,,,,,0,0,0,0,0,3
+,,,D4,FURIA,0-0,0-0,0,SAM2,,,Spacestation Gaming,3,0,,,,Spacestation Gaming,3,0,,,,FURIA,9,0,,,FURIA,9,,,,,,0,0,0,0,0,3
