@@ -16,7 +16,14 @@ FROM node:20-alpine AS frontend
 WORKDIR /app/web
 
 # corepack ships with Node 20; activate pnpm without a global install.
-RUN corepack enable && corepack prepare pnpm@latest --activate
+#
+# Pinned to the 10.x line on purpose: pnpm 11 dropped Node 18/19/20/21 and
+# uses the node:sqlite builtin (Node 22.5+ only), so an unpinned pnpm@latest
+# crashes on this Node 20 base image with ERR_UNKNOWN_BUILTIN_MODULE. pnpm 10
+# runs on Node 20, uses the same lockfileVersion 9.0 as the committed
+# pnpm-lock.yaml, and avoids pnpm 11's new minimumReleaseAge/blockExoticSubdeps
+# defaults. "latest-10" is pnpm's published dist-tag for the newest 10.x.
+RUN corepack enable && corepack prepare pnpm@latest-10 --activate
 
 # Manifests first — this layer is cached unless dependencies change.
 COPY web/package.json web/pnpm-lock.yaml ./
