@@ -56,6 +56,7 @@ func NewRouter(d Deps) http.Handler {
 
 		r.Get("/health", s.health)
 		r.Get("/matches", s.listMatches)
+		r.Get("/simulation", s.getSimulation)
 		r.Get("/sync/status", s.syncStatus)
 
 		r.Post("/login", s.login)

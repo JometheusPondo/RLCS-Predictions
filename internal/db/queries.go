@@ -11,6 +11,7 @@ import (
 	"github.com/jometheuspondo/rlcs-predictions/internal/locking"
 	"github.com/jometheuspondo/rlcs-predictions/internal/models"
 	"github.com/jometheuspondo/rlcs-predictions/internal/scoring"
+	"github.com/jometheuspondo/rlcs-predictions/internal/simulation"
 )
 
 // Sentinel errors returned by query functions. Callers (API handlers, the
@@ -306,6 +307,35 @@ func (db *DB) scoringPredictions(ctx context.Context) ([]scoring.PredictionRow, 
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// =============================================================================
+// Simulation
+// =============================================================================
+
+// SimulateProjection runs the best-case / worst-case standings projection for
+// the current day (see internal/simulation). Returns the projected day
+// (YYYY-MM-DD, "" when the tournament has no unfinished matches) and one
+// result per real participant.
+//
+// It reuses the same inputs as scoring — every match, every non-admin
+// prediction, the participant list — so the projection and the live
+// leaderboard are always derived from one consistent snapshot.
+func (db *DB) SimulateProjection(ctx context.Context) (day string, results []simulation.Result, err error) {
+	matches, err := db.ListMatches(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	preds, err := db.scoringPredictions(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	participants, err := db.ListParticipants(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	day, results = simulation.Compute(matches, preds, participants)
+	return day, results, nil
 }
 
 // =============================================================================

@@ -15,6 +15,7 @@ import (
 
 	"github.com/jometheuspondo/rlcs-predictions/internal/db"
 	"github.com/jometheuspondo/rlcs-predictions/internal/models"
+	"github.com/jometheuspondo/rlcs-predictions/internal/simulation"
 )
 
 // server holds the dependencies; handlers are methods so they share state via
@@ -63,6 +64,37 @@ func (s *server) listMatches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, matches)
+}
+
+// =============================================================================
+// Simulation
+// =============================================================================
+
+// simulationResponse is the GET /api/simulation shape: the day the projection
+// covers (null when no matches remain) and a per-participant swing list.
+type simulationResponse struct {
+	SimulationDay *string             `json:"simulation_day"`
+	Results       []simulation.Result `json:"results"`
+}
+
+// getSimulation returns the best-case / worst-case standings projection for
+// the current day (see internal/simulation). It never alters the leaderboard;
+// the frontend overlays these deltas onto the real, points-sorted board.
+func (s *server) getSimulation(w http.ResponseWriter, r *http.Request) {
+	day, results, err := s.deps.DB.SimulateProjection(r.Context())
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+
+	resp := simulationResponse{Results: results}
+	if day != "" {
+		resp.SimulationDay = &day
+	}
+	if resp.Results == nil {
+		resp.Results = []simulation.Result{}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // =============================================================================

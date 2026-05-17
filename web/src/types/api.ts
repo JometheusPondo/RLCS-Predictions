@@ -71,6 +71,25 @@ export interface SyncStatus {
   last_error: string | null;
 }
 
+// One participant's projected day swing, from GET /api/simulation. Both values
+// are >= 0: best_case = positions that could be GAINED if all of that player's
+// picks for the day hit, worst_case = positions that could be LOST if all
+// miss. A 0 means they're capped (top/bottom of the board, or a pure-consensus
+// slate). See internal/simulation.
+export interface SimulationResult {
+  participant_id: string;
+  best_case: number;
+  worst_case: number;
+}
+
+// GET /api/simulation response.
+export interface SimulationResponse {
+  // The day the projection covers (YYYY-MM-DD), or null when the tournament
+  // has no unfinished matches left to simulate.
+  simulation_day: string | null;
+  results: SimulationResult[];
+}
+
 // Error envelope returned by every 4xx/5xx. See internal/api/handlers.go.
 export interface ApiErrorBody {
   error: string;

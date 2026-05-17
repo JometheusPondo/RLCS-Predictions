@@ -10,6 +10,7 @@ import type {
   ParticipantWithPredictions,
   Pick,
   Prediction,
+  SimulationResponse,
   SyncStatus,
   ApiErrorBody,
   LoginResponse,
@@ -77,6 +78,11 @@ export const api = {
 
   getParticipant: (id: string): Promise<ParticipantWithPredictions> =>
     request<ParticipantWithPredictions>(`/participants/${encodeURIComponent(id)}`),
+
+  // getSimulation returns the best-case / worst-case standings projection for
+  // the current day. It never alters the leaderboard — the caller overlays the
+  // per-participant deltas onto the real, points-sorted board.
+  getSimulation: (): Promise<SimulationResponse> => request<SimulationResponse>('/simulation'),
 
   // NOTE: self-registration is currently disabled — POST /api/participants is
   // not registered on the backend, so calling this will 404. Kept for when an
