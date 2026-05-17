@@ -13,12 +13,22 @@ interface RoundSectionProps {
   // readOnly renders non-interactive cards — used when viewing someone else's
   // profile (you can see their completed-match picks but not change anything).
   readOnly?: boolean;
+  // bypassLock is forwarded to MatchCard: when true, upcoming/live matches stay
+  // tappable even after they lock. Used for the lock-exempt accounts (The Coin,
+  // Chat). No effect when readOnly is true.
+  bypassLock?: boolean;
 }
 
 // RoundSection renders one round-header section: the round name followed by its
 // match cards. Interactive (MatchCard) on your own profile; read-only
 // (ReadOnlyMatchCard) when viewing someone else's.
-export function RoundSection({ group, pickForMatch, onPick, readOnly = false }: RoundSectionProps) {
+export function RoundSection({
+  group,
+  pickForMatch,
+  onPick,
+  readOnly = false,
+  bypassLock = false,
+}: RoundSectionProps) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
@@ -38,6 +48,7 @@ export function RoundSection({ group, pickForMatch, onPick, readOnly = false }: 
               match={match}
               userPick={pickForMatch(match.id)}
               onPick={(side) => onPick(match.id, side)}
+              bypassLock={bypassLock}
             />
           ),
         )}

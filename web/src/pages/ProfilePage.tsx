@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ApiClientError } from '../api/client';
 import { groupMatchesByRound } from '../lib/matches';
-import { useAuth } from '../lib/auth';
+import { useAuth, isLockExempt } from '../lib/auth';
 import { RoundSection } from '../components/RoundSection';
 import { SkeletonSection } from '../components/Skeleton';
 import { TeamChip } from '../components/TeamChip';
@@ -26,6 +26,14 @@ export function ProfilePage() {
   // anyone else (or being anonymous) is read-only — and the server only returns
   // their completed-match predictions anyway.
   const canEdit = auth !== null && auth === id;
+
+  // The Coin and Chat are lock-exempt accounts: when the operator is logged in
+  // as one of them, its match cards stay tappable even after the day locks, so
+  // their picks can be entered or changed at any time. The server waives the
+  // lock for these accounts in parallel (see lockExemptParticipants in
+  // internal/db/queries.go), so the taps actually save. Completed matches stay
+  // locked even here — a post-result correction is a rare operator job.
+  const bypassLock = canEdit && isLockExempt(id ?? null);
 
   // The participant query key includes the viewer's identity (auth). The server
   // filters predictions by who's asking — you only see other people's
@@ -245,6 +253,7 @@ export function ProfilePage() {
           pickForMatch={pickForMatch}
           onPick={handlePick}
           readOnly={!canEdit}
+          bypassLock={bypassLock}
         />
       ))}
     </main>

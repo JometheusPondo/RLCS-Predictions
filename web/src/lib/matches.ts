@@ -67,11 +67,27 @@ export interface SideState {
 // "Locked" (Match.locked) is computed server-side: a match's day-lock time
 // has passed, or — on the final day — the match has started. A locked match
 // keeps showing the user's pick but can no longer be changed.
-export function sideState(side: Pick, match: Match, userPick: Pick | null): SideState {
+//
+// bypassLock overrides the lock for upcoming/live matches only: when true, an
+// otherwise-locked match is still tappable. It's used for the lock-exempt
+// accounts (The Coin, Chat — see isLockExempt in lib/auth), whose picks the
+// operator enters at any time. The server waives the lock for those accounts
+// in parallel, so the tap actually succeeds. Completed matches stay locked
+// regardless — a post-result correction is a rare operator-curl job, not a UI
+// flow, and a tappable green/red result card would just be confusing.
+export function sideState(
+  side: Pick,
+  match: Match,
+  userPick: Pick | null,
+  bypassLock = false,
+): SideState {
   const completed = match.status === 'completed';
 
   if (!completed) {
-    return { visual: userPick === side ? 'blue' : 'neutral', tappable: !match.locked };
+    return {
+      visual: userPick === side ? 'blue' : 'neutral',
+      tappable: bypassLock || !match.locked,
+    };
   }
 
   const thisSideWon = match.winner === side;

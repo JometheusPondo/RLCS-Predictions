@@ -14,6 +14,20 @@ const AUTH_EVENT = 'rlcs-auth-change';
 // leaderboard. Must stay in sync with models.AdminID on the Go side.
 export const ADMIN_ID = 'blast_admin';
 
+// LOCK_EXEMPT_IDS are the special, non-standard leaderboard accounts — "The
+// Coin" (a coin-flip benchmark) and "Chat" (a chat-vote benchmark) — whose
+// picks the operator may set or change at any time, including after a match
+// has locked for regular participants. They are scored and ranked like every
+// other participant; the prediction lock is the only rule they skip.
+//
+// Must stay in sync with lockExemptParticipants in internal/db/queries.go.
+export const LOCK_EXEMPT_IDS: readonly string[] = ['the-coin', 'chat'];
+
+// isLockExempt reports whether a participant id bypasses prediction locking.
+export function isLockExempt(id: string | null): boolean {
+  return id !== null && LOCK_EXEMPT_IDS.includes(id);
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }

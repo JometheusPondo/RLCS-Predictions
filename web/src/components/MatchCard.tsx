@@ -8,6 +8,10 @@ interface MatchCardProps {
   // onPick is called with the side that was tapped. The parent decides whether
   // that means "set" or "clear" (tapping the already-picked side clears).
   onPick: (side: Pick) => void;
+  // bypassLock keeps upcoming/live matches tappable even when match.locked is
+  // true. Used for the lock-exempt accounts (The Coin, Chat) so the operator
+  // can set their picks at any time. Completed matches stay non-interactive.
+  bypassLock?: boolean;
 }
 
 // Tailwind classes per SideVisual. Colors are from spec § 7.2; neutral uses a
@@ -20,9 +24,9 @@ const visualClasses: Record<SideVisual, string> = {
   'winner-outline': 'bg-zinc-800 text-zinc-100 ring-1 ring-inset ring-emerald-500/60',
 };
 
-export function MatchCard({ match, userPick, onPick }: MatchCardProps) {
-  const a = sideState('A', match, userPick);
-  const b = sideState('B', match, userPick);
+export function MatchCard({ match, userPick, onPick, bypassLock = false }: MatchCardProps) {
+  const a = sideState('A', match, userPick, bypassLock);
+  const b = sideState('B', match, userPick, bypassLock);
 
   // Center shows the score once both are present, otherwise "vs".
   const center =

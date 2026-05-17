@@ -27,6 +27,8 @@ var (
 	// match whose predictions are locked — the match has completed, or the
 	// day's lock time has passed, or (on the final day) the match has started.
 	// Server-side enforcement; the frontend also gates this via Match.Locked.
+	//
+	// Participants in lockExemptParticipants are never subject to this.
 	ErrPredictionsLocked = errors.New("predictions are locked for this match")
 )
 
@@ -547,6 +549,20 @@ func (db *DB) UpdateLastSyncedAt(ctx context.Context, tournamentID int, syncedAt
 // Predictions
 // =============================================================================
 
+// lockExemptParticipants are special, non-standard leaderboard accounts whose
+// predictions the operator may set or change at ANY time — including after a
+// match has locked, or even finished, for regular participants. "The Coin" is
+// a coin-flip benchmark and "Chat" is a chat-vote benchmark; their picks are
+// entered manually, often seconds before a match, so they can't be bound by
+// the normal lock. They are scored and ranked exactly like everyone else —
+// the prediction lock is the only rule they skip.
+//
+// Keyed by participant id (the slug of the display name).
+var lockExemptParticipants = map[string]bool{
+	"the-coin": true, // "The Coin"
+	"chat":     true, // "Chat"
+}
+
 // SetPrediction upserts a prediction. Validates that the match exists and that
 // its predictions are not locked (see checkPredictionWriteable). Returns
 // ErrNotFound if either the participant or the match is missing, or
@@ -596,6 +612,10 @@ func (db *DB) DeletePrediction(ctx context.Context, participantID, matchID strin
 // The lock decision is taken straight from ListMatches, which computes
 // Match.Locked — so server-side enforcement and the Locked flag the frontend
 // sees can never disagree.
+//
+// Participants in lockExemptParticipants skip the lock check entirely (see
+// that var's doc). The match- and participant-existence checks still apply to
+// them — only the lock is waived.
 func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, matchID string) error {
 	matches, err := db.ListMatches(ctx)
 	if err != nil {
@@ -611,7 +631,7 @@ func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, match
 	if match == nil {
 		return ErrNotFound
 	}
-	if match.Locked {
+	if match.Locked && !lockExemptParticipants[participantID] {
 		return ErrPredictionsLocked
 	}
 
