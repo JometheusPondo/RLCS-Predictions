@@ -1,6 +1,7 @@
 import type { Match, Pick } from '../types/api';
-import { sideState, type SideVisual } from '../lib/matches';
+import { sideState, sideRingClass, type SideVisual } from '../lib/matches';
 import { TeamLogo } from './TeamLogo';
+import { UnderdogBadge } from './UnderdogBadge';
 
 interface ReadOnlyMatchCardProps {
   match: Match;
@@ -9,19 +10,21 @@ interface ReadOnlyMatchCardProps {
 
 // Same Tailwind mapping as MatchCard. Kept as a separate const (rather than
 // shared/exported) so the two card variants can drift independently if needed.
+// Rings — the winner outline and the underdog ring — come from sideRingClass.
 const visualClasses: Record<SideVisual, string> = {
   blue: 'bg-blue-600 text-white',
   green: 'bg-emerald-600 text-white',
   red: 'bg-red-600 text-white',
   neutral: 'bg-zinc-800 text-zinc-100',
-  'winner-outline': 'bg-zinc-800 text-zinc-100 ring-1 ring-inset ring-emerald-500/60',
+  'winner-outline': 'bg-zinc-800 text-zinc-100',
 };
 
 // ReadOnlyMatchCard renders a match with the participant's pick highlighted
 // using the § 7.2 color rules, but with no click handlers and no hover
 // affordance — used in the leaderboard drawer (spec § 7.3) and for other
 // users' profiles. Logos sit on the card's outer edges: [logo name] on the
-// left, [name logo] on the right.
+// left, [name logo] on the right. The underdog team (Match.underdog, set only
+// on locked matches) gets an orange ring and an "Underdog" badge.
 export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
   const a = sideState('A', match, userPick);
   const b = sideState('B', match, userPick);
@@ -34,22 +37,27 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
   // "no prediction" label for upcoming/live matches the participant skipped.
   const noPick = userPick === null && match.status !== 'completed';
 
+  const aUnderdog = match.underdog === 'A';
+  const bUnderdog = match.underdog === 'B';
+
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-800">
       <div className="flex items-stretch">
         <div
-          className={`flex flex-1 items-center justify-start gap-2 px-4 py-3 text-left text-sm font-medium ${visualClasses[a.visual]}`}
+          className={`flex min-w-0 flex-1 items-center justify-start gap-2 px-4 py-3 text-left text-sm font-medium ${visualClasses[a.visual]} ${sideRingClass(a.visual, aUnderdog)}`}
         >
           <TeamLogo teamName={match.team_a} />
-          <span>{match.team_a}</span>
+          <span className="truncate">{match.team_a}</span>
+          {aUnderdog && <UnderdogBadge />}
         </div>
         <div className="flex shrink-0 items-center px-3 text-sm font-medium text-zinc-400">
           {center}
         </div>
         <div
-          className={`flex flex-1 items-center justify-end gap-2 px-4 py-3 text-right text-sm font-medium ${visualClasses[b.visual]}`}
+          className={`flex min-w-0 flex-1 items-center justify-end gap-2 px-4 py-3 text-right text-sm font-medium ${visualClasses[b.visual]} ${sideRingClass(b.visual, bUnderdog)}`}
         >
-          <span>{match.team_b}</span>
+          {bUnderdog && <UnderdogBadge />}
+          <span className="truncate">{match.team_b}</span>
           <TeamLogo teamName={match.team_b} />
         </div>
       </div>

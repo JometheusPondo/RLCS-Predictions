@@ -167,3 +167,30 @@ func TestComputeScores_BenchmarkScoredAgainstHumanTally(t *testing.T) {
 			scores["chat"], PointsCorrectUnderdog+PointsCorrect)
 	}
 }
+
+func TestUnderdogSide(t *testing.T) {
+	cases := []struct {
+		name     string
+		a, b     int
+		wantSide string
+		wantOK   bool
+	}{
+		{"A is the minority, under cutoff", 2, 7, models.PickA, true},
+		{"B is the minority, under cutoff", 9, 3, models.PickB, true},
+		{"A minority at the cutoff", 4, 9, models.PickA, true},
+		{"A minority just over the cutoff", 5, 9, "", false},
+		{"both sides over the cutoff", 7, 6, "", false},
+		{"tie under the cutoff", 3, 3, "", false},
+		{"tie over the cutoff", 8, 8, "", false},
+		{"one side empty", 0, 5, models.PickA, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			side, ok := UnderdogSide(c.a, c.b)
+			if side != c.wantSide || ok != c.wantOK {
+				t.Errorf("UnderdogSide(%d, %d) = (%q, %t), want (%q, %t)",
+					c.a, c.b, side, ok, c.wantSide, c.wantOK)
+			}
+		})
+	}
+}

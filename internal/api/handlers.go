@@ -58,7 +58,7 @@ func (s *server) syncStatus(w http.ResponseWriter, _ *http.Request) {
 // =============================================================================
 
 func (s *server) listMatches(w http.ResponseWriter, r *http.Request) {
-	matches, err := s.deps.DB.ListMatches(r.Context())
+	matches, err := s.deps.DB.ListMatchesWithUnderdog(r.Context())
 	if err != nil {
 		s.serverError(w, r, err)
 		return

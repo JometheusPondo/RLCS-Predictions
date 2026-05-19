@@ -112,6 +112,13 @@ type Round struct {
 // are locked (the day's lock time has passed, or — on the final day — the
 // match has started, or the match is completed). The frontend uses it to
 // gate tappability; the server also enforces it independently on writes.
+//
+// Underdog is also COMPUTED, not stored. It names the side ("A" / "B") that
+// is the underdog pick — the team fewer humans picked, see scoring.UnderdogSide
+// — or is nil when the match has no single underdog side. It is populated only
+// by ListMatchesWithUnderdog, and only on LOCKED matches: revealing the
+// underdog while predictions can still change would leak the crowd's lean, so
+// it stays nil until the pick distribution is frozen.
 type Match struct {
 	ID           string  `json:"id"`
 	Round        Round   `json:"round"`
@@ -126,6 +133,7 @@ type Match struct {
 	PlaceholderB *string `json:"placeholder_b"`
 	Slot         *string `json:"slot"`
 	Locked       bool    `json:"locked"`
+	Underdog     *string `json:"underdog"`
 }
 
 // SyncStatus is the shape returned by GET /api/sync/status.

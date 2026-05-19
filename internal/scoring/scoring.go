@@ -48,6 +48,37 @@ const (
 // an underdog side; 5 or more humans and it is not.
 const UnderdogMaxHumanPicks = 4
 
+// UnderdogSide reports which side of a match is "the underdog" for display
+// purposes, given the human pick counts on side A and side B. It is a pure
+// helper, separate from ComputeScores: the leaderboard scores every pick, but
+// a match card highlights at most ONE underdog team.
+//
+// The underdog is the side with STRICTLY FEWER human picks, returned only when
+// that side is at or below UnderdogMaxHumanPicks — i.e. only when it actually
+// earns the underdog bonus. So:
+//
+//   - a clear minority side at/under the cutoff  → that side, ok=true
+//   - the two sides tied                         → ok=false (no single minority)
+//   - the smaller side still above the cutoff    → ok=false (no underdog)
+//
+// It therefore never reports two underdog sides, and reports none when the
+// match has no bonus-eligible minority. Benchmark and admin picks must already
+// be excluded from picksA / picksB by the caller — same humans-only basis the
+// scoring tally uses.
+func UnderdogSide(picksA, picksB int) (side string, ok bool) {
+	if picksA == picksB {
+		return "", false
+	}
+	minSide, minCount := models.PickA, picksA
+	if picksB < picksA {
+		minSide, minCount = models.PickB, picksB
+	}
+	if minCount > UnderdogMaxHumanPicks {
+		return "", false
+	}
+	return minSide, true
+}
+
 // gamesToWin is the wins needed to take a series in each stage: group stage is
 // Bo5 (first to 3), bracket is Bo7 (first to 4).
 func gamesToWin(stage string) int {

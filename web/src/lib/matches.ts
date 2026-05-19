@@ -96,3 +96,14 @@ export function sideState(
   }
   return { visual: thisSideWon ? 'winner-outline' : 'neutral', tappable: false };
 }
+
+// sideRingClass is the Tailwind ring utility for one side of a match card.
+// The orange underdog ring takes precedence over the emerald winner outline,
+// so a side that is BOTH the unpicked winner and the underdog reads as the
+// underdog — the "Underdog" badge keeps the meaning unambiguous either way.
+// Returns '' when the side needs no ring.
+export function sideRingClass(visual: SideVisual, isUnderdog: boolean): string {
+  if (isUnderdog) return 'ring-2 ring-inset ring-orange-500';
+  if (visual === 'winner-outline') return 'ring-1 ring-inset ring-emerald-500/60';
+  return '';
+}
