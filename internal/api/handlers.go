@@ -312,6 +312,11 @@ func (s *server) setWinnerPick(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.deps.DB.AddWinnerPick(r.Context(), id, req.TeamName); err != nil {
+		if errors.Is(err, db.ErrWinnerPickLocked) {
+			writeError(w, http.StatusBadRequest, "winner_pick_locked",
+				"the tournament has started, winner picks are locked")
+			return
+		}
 		s.serverError(w, r, err)
 		return
 	}

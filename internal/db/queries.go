@@ -30,6 +30,12 @@ var (
 	//
 	// Participants in nonStandardParticipants are never subject to this.
 	ErrPredictionsLocked = errors.New("predictions are locked for this match")
+
+	// ErrWinnerPickLocked is returned by AddWinnerPick once the tournament has
+	// started — winner picks lock permanently the moment Day 1 begins (see
+	// winnerPicksLocked). Participants in nonStandardParticipants are exempt,
+	// mirroring ErrPredictionsLocked.
+	ErrWinnerPickLocked = errors.New("winner picks are locked")
 )
 
 // =============================================================================
@@ -664,12 +670,50 @@ func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, match
 // The history is append-only — the participant's current pick is the most
 // recent row. The caller is responsible for auth and for validating teamName
 // against the tournament's actual teams (see ListTeamNames).
+//
+// Returns ErrWinnerPickLocked once the tournament has started (see
+// winnerPicksLocked). Participants in nonStandardParticipants (The Coin, Chat)
+// are exempt — mirroring the prediction lock — so the operator can still set
+// the benchmark accounts at any time.
 func (db *DB) AddWinnerPick(ctx context.Context, participantID, teamName string) error {
+	if !nonStandardParticipants[participantID] {
+		locked, err := db.winnerPicksLocked(ctx)
+		if err != nil {
+			return err
+		}
+		if locked {
+			return ErrWinnerPickLocked
+		}
+	}
+
 	_, err := db.ExecContext(ctx,
 		`INSERT INTO winner_pick_history (participant_id, team_name) VALUES (?, ?)`,
 		participantID, teamName,
 	)
 	return err
+}
+
+// winnerPicksLocked reports whether tournament-winner picks are locked. They
+// lock permanently the moment Day 1 begins.
+//
+// "Day 1 begins" needs no separate time computation. The tournament's earliest
+// match is by definition a Day 1 match, so the first match whose predictions
+// lock is always a Day 1 match — therefore "any match is locked" is exactly
+// "Day 1 has begun". And because Match.Locked is monotonic (a passed lock time
+// stays passed, a started match stays started), once this returns true it
+// never returns false again: the winner pick is frozen for the rest of the
+// event, with no extra "permanent" bookkeeping.
+func (db *DB) winnerPicksLocked(ctx context.Context) (bool, error) {
+	matches, err := db.ListMatches(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, m := range matches {
+		if m.Locked {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ListTeamNames returns the distinct set of team names appearing in any match,

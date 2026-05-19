@@ -150,6 +150,13 @@ export function ProfilePage() {
   const currentWinnerPick =
     winnerPicks.length > 0 ? winnerPicks[winnerPicks.length - 1] : null;
 
+  // Winner picks lock permanently once Day 1 begins — i.e. once any match has
+  // locked. Derived from the match list the page already fetches; no API
+  // change needed. The Coin and Chat stay editable, mirroring the prediction-
+  // lock exemption and the server (see AddWinnerPick).
+  const winnerPickLocked =
+    (matchesQuery.data ?? []).some((m) => m.locked) && !isLockExempt(id ?? null);
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-6">
       <header>
@@ -161,9 +168,10 @@ export function ProfilePage() {
         </p>
       </header>
 
-      {/* Tournament winner pick — editable selector on your own profile,
-          a read-only line when viewing someone else's. */}
-      {canEdit ? (
+      {/* Tournament winner pick — an editable selector on your own profile
+          until Day 1 begins; a read-only line otherwise (someone else's
+          profile, or your own once winner picks have locked). */}
+      {canEdit && !winnerPickLocked ? (
         <section className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
