@@ -28,7 +28,7 @@ var (
 	// day's lock time has passed, or (on the final day) the match has started.
 	// Server-side enforcement; the frontend also gates this via Match.Locked.
 	//
-	// Participants in lockExemptParticipants are never subject to this.
+	// Participants in nonStandardParticipants are never subject to this.
 	ErrPredictionsLocked = errors.New("predictions are locked for this match")
 )
 
@@ -290,6 +290,10 @@ func (db *DB) computeAllScores(ctx context.Context) (map[string]int, error) {
 // EXCLUDING the blast_admin account. blast_admin is not a participant: its
 // predictions must neither earn points nor count toward anyone's underdog
 // tally, so they are filtered out before scoring ever sees them.
+//
+// Rows for nonStandardParticipants ("The Coin", "Chat") are kept — they are
+// scored normally — but flagged with Benchmark = true so the scoring layer
+// leaves them out of the underdog tally.
 func (db *DB) scoringPredictions(ctx context.Context) ([]scoring.PredictionRow, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT participant_id, match_id, pick FROM predictions WHERE participant_id != ?`,
@@ -306,6 +310,7 @@ func (db *DB) scoringPredictions(ctx context.Context) ([]scoring.PredictionRow, 
 		if err := rows.Scan(&r.ParticipantID, &r.MatchID, &r.Pick); err != nil {
 			return nil, err
 		}
+		r.Benchmark = nonStandardParticipants[r.ParticipantID]
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -549,16 +554,24 @@ func (db *DB) UpdateLastSyncedAt(ctx context.Context, tournamentID int, syncedAt
 // Predictions
 // =============================================================================
 
-// lockExemptParticipants are special, non-standard leaderboard accounts whose
-// predictions the operator may set or change at ANY time — including after a
-// match has locked, or even finished, for regular participants. "The Coin" is
-// a coin-flip benchmark and "Chat" is a chat-vote benchmark; their picks are
-// entered manually, often seconds before a match, so they can't be bound by
-// the normal lock. They are scored and ranked exactly like everyone else —
-// the prediction lock is the only rule they skip.
+// nonStandardParticipants are special, non-standard leaderboard accounts —
+// "The Coin", a coin-flip benchmark, and "Chat", a chat-vote benchmark. Their
+// picks are entered manually, often seconds before a match. Membership here
+// governs two behaviors:
+//
+//  1. Lock bypass: the operator may set or change their predictions at ANY
+//     time, including after a match has locked or finished for regular
+//     participants (see checkPredictionWriteable).
+//  2. Underdog-tally exclusion: their picks do NOT count toward the
+//     cross-participant underdog tally, so they cannot tip a human's pick into
+//     or out of underdog territory (see scoringPredictions, which sets
+//     scoring.PredictionRow.Benchmark from this set).
+//
+// They are still scored and ranked exactly like everyone else — they earn
+// points, including the underdog bonus, just like a normal participant.
 //
 // Keyed by participant id (the slug of the display name).
-var lockExemptParticipants = map[string]bool{
+var nonStandardParticipants = map[string]bool{
 	"the-coin": true, // "The Coin"
 	"chat":     true, // "Chat"
 }
@@ -613,7 +626,7 @@ func (db *DB) DeletePrediction(ctx context.Context, participantID, matchID strin
 // Match.Locked — so server-side enforcement and the Locked flag the frontend
 // sees can never disagree.
 //
-// Participants in lockExemptParticipants skip the lock check entirely (see
+// Participants in nonStandardParticipants skip the lock check entirely (see
 // that var's doc). The match- and participant-existence checks still apply to
 // them — only the lock is waived.
 func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, matchID string) error {
@@ -631,7 +644,7 @@ func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, match
 	if match == nil {
 		return ErrNotFound
 	}
-	if match.Locked && !lockExemptParticipants[participantID] {
+	if match.Locked && !nonStandardParticipants[participantID] {
 		return ErrPredictionsLocked
 	}
 

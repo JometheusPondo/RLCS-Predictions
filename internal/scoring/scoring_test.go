@@ -23,8 +23,8 @@ func completedMatch(id, stage, winner string, scoreA, scoreB int) models.Match {
 }
 
 func TestComputeScores_CorrectNonUnderdog(t *testing.T) {
-	// One match, team A wins. Six participants all pick A → each has 5 others
-	// on the same side → not an underdog pick → 2 points each.
+	// One match, team A wins. Six humans all pick A → 6 humans on the side →
+	// above the underdog cutoff → not an underdog pick → 2 points each.
 	m := completedMatch("m1", models.StageGroup, models.PickA, 3, 1)
 	var preds []PredictionRow
 	for _, who := range []string{"a", "b", "c", "d", "e", "f"} {
@@ -42,21 +42,21 @@ func TestComputeScores_CorrectNonUnderdog(t *testing.T) {
 func TestComputeScores_UnderdogBoundary(t *testing.T) {
 	m := completedMatch("m1", models.StageGroup, models.PickA, 3, 0)
 
-	// 5 participants pick A: each has 4 others → 4 < 5 → underdog → 4 points.
-	five := []PredictionRow{}
-	for _, who := range []string{"a", "b", "c", "d", "e"} {
-		five = append(five, PredictionRow{ParticipantID: who, MatchID: "m1", Pick: models.PickA})
+	// 4 humans pick A → 4 humans on the side → 4 <= 4 → underdog → 4 points.
+	four := []PredictionRow{}
+	for _, who := range []string{"a", "b", "c", "d"} {
+		four = append(four, PredictionRow{ParticipantID: who, MatchID: "m1", Pick: models.PickA})
 	}
-	scores := ComputeScores([]models.Match{m}, five)
+	scores := ComputeScores([]models.Match{m}, four)
 	if scores["a"] != PointsCorrectUnderdog {
-		t.Errorf("5 pickers (4 others): got %d, want %d (underdog)", scores["a"], PointsCorrectUnderdog)
+		t.Errorf("4 humans on side: got %d, want %d (underdog)", scores["a"], PointsCorrectUnderdog)
 	}
 
-	// 6 participants pick A: each has 5 others → 5 is NOT < 5 → not underdog.
-	six := append(five, PredictionRow{ParticipantID: "f", MatchID: "m1", Pick: models.PickA})
-	scores = ComputeScores([]models.Match{m}, six)
+	// 5 humans pick A → 5 humans on the side → 5 > 4 → not an underdog.
+	five := append(four, PredictionRow{ParticipantID: "e", MatchID: "m1", Pick: models.PickA})
+	scores = ComputeScores([]models.Match{m}, five)
 	if scores["a"] != PointsCorrect {
-		t.Errorf("6 pickers (5 others): got %d, want %d (not underdog)", scores["a"], PointsCorrect)
+		t.Errorf("5 humans on side: got %d, want %d (not underdog)", scores["a"], PointsCorrect)
 	}
 }
 
@@ -85,8 +85,8 @@ func TestComputeScores_IgnoresNonCompletedAndUnknownMatches(t *testing.T) {
 		Status: models.StatusLive, TeamAScore: ip(1), TeamBScore: ip(0),
 	}
 	preds := []PredictionRow{
-		{ParticipantID: "p", MatchID: "live", Pick: models.PickA},    // match not completed
-		{ParticipantID: "p", MatchID: "ghost", Pick: models.PickA},   // match not in set
+		{ParticipantID: "p", MatchID: "live", Pick: models.PickA},  // match not completed
+		{ParticipantID: "p", MatchID: "ghost", Pick: models.PickA}, // match not in set
 	}
 	scores := ComputeScores([]models.Match{live}, preds)
 	if scores["p"] != 0 {
@@ -113,5 +113,57 @@ func TestComputeScores_SumsAcrossMatches(t *testing.T) {
 	}
 	if scores["p2"] != 4 {
 		t.Errorf("p2: got %d, want 4", scores["p2"])
+	}
+}
+
+func TestComputeScores_BenchmarkExcludedFromUnderdogTally(t *testing.T) {
+	// Four humans pick A → 4 humans on the side → 4 <= 4 → underdog → 4 points
+	// each. A benchmark account ("The Coin") also picks A. If the benchmark
+	// counted toward the tally the side would show 5 humans and drop out of
+	// underdog territory — it must NOT count.
+	m := completedMatch("m1", models.StageGroup, models.PickA, 3, 0)
+
+	preds := []PredictionRow{}
+	for _, who := range []string{"h1", "h2", "h3", "h4"} {
+		preds = append(preds, PredictionRow{ParticipantID: who, MatchID: "m1", Pick: models.PickA})
+	}
+	preds = append(preds, PredictionRow{
+		ParticipantID: "the-coin", MatchID: "m1", Pick: models.PickA, Benchmark: true,
+	})
+
+	scores := ComputeScores([]models.Match{m}, preds)
+	for _, who := range []string{"h1", "h2", "h3", "h4"} {
+		if scores[who] != PointsCorrectUnderdog {
+			t.Errorf("%s: got %d, want %d — benchmark pick inflated the underdog tally",
+				who, scores[who], PointsCorrectUnderdog)
+		}
+	}
+}
+
+func TestComputeScores_BenchmarkScoredAgainstHumanTally(t *testing.T) {
+	// A benchmark account is scored against the human-only tally, exactly like
+	// a participant. On m1, three humans plus the benchmark pick A → 3 humans
+	// on the side → underdog → the benchmark earns the 4-point bonus. On m2,
+	// five humans plus the benchmark pick A → 5 humans → above the cutoff →
+	// the benchmark gets the plain correct score, no bonus.
+	m1 := completedMatch("m1", models.StageGroup, models.PickA, 3, 0)
+	m2 := completedMatch("m2", models.StageGroup, models.PickA, 3, 0)
+
+	preds := []PredictionRow{
+		{ParticipantID: "chat", MatchID: "m1", Pick: models.PickA, Benchmark: true},
+		{ParticipantID: "chat", MatchID: "m2", Pick: models.PickA, Benchmark: true},
+	}
+	for _, who := range []string{"h1", "h2", "h3"} {
+		preds = append(preds, PredictionRow{ParticipantID: who, MatchID: "m1", Pick: models.PickA})
+	}
+	for _, who := range []string{"h1", "h2", "h3", "h4", "h5"} {
+		preds = append(preds, PredictionRow{ParticipantID: who, MatchID: "m2", Pick: models.PickA})
+	}
+
+	scores := ComputeScores([]models.Match{m1, m2}, preds)
+	// m1 underdog bonus (4) + m2 plain correct (2) = 6.
+	if scores["chat"] != PointsCorrectUnderdog+PointsCorrect {
+		t.Errorf("chat (benchmark): got %d, want %d (4 underdog + 2 correct)",
+			scores["chat"], PointsCorrectUnderdog+PointsCorrect)
 	}
 }

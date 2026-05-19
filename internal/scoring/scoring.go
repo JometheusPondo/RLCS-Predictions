@@ -12,15 +12,23 @@
 // "Went the distance" means the series used every game: a Bo5 group-stage
 // match at 3-2 (5 games), a Bo7 bracket match at 4-3 (7 games).
 //
-// "Underdog pick" means STRICTLY FEWER than UnderdogMaxOthers *other*
-// participants picked that same side on that same match. Because predictions
-// lock when a match starts, the pick distribution is frozen by the time a
-// match completes — so the underdog determination is stable, and computing
-// scores on every leaderboard read is deterministic.
+// "Underdog pick" means AT MOST UnderdogMaxHumanPicks humans picked that same
+// side on that same match. Because predictions lock when a match starts, the
+// pick distribution is frozen by the time a match completes — so the underdog
+// determination is stable, and computing scores on every leaderboard read is
+// deterministic.
 //
 // The blast_admin account is not a participant; the DB layer excludes its
 // predictions before they reach this package, so they neither earn points nor
 // affect anyone's underdog count.
+//
+// Benchmark rows (PredictionRow.Benchmark == true — the manually-entered "The
+// Coin" and "Chat" accounts) are a softer exclusion: they ARE scored like any
+// other participant, but they do NOT contribute to the underdog tally, so they
+// cannot tip a human's pick into or out of underdog territory. The underdog
+// test — at most UnderdogMaxHumanPicks humans on the side — is the same for
+// every row, so a benchmark earns the underdog bonus on exactly the sides a
+// human would.
 package scoring
 
 import "github.com/jometheuspondo/rlcs-predictions/internal/models"
@@ -33,11 +41,12 @@ const (
 	PointsWrong           = 0
 )
 
-// UnderdogMaxOthers is the underdog cutoff: a pick is an underdog pick when
-// STRICTLY FEWER than this many OTHER participants picked the same side on the
-// same match. At 5, a pick shared with 0–4 others is an underdog; sharing it
-// with 5 or more others is not.
-const UnderdogMaxOthers = 5
+// UnderdogMaxHumanPicks is the underdog cutoff: a pick is an underdog pick when
+// AT MOST this many humans picked the same side on the same match. Benchmark
+// accounts are not humans and never count toward this total (see the package
+// doc); they are still scored against it. At 4, a side chosen by 1–4 humans is
+// an underdog side; 5 or more humans and it is not.
+const UnderdogMaxHumanPicks = 4
 
 // gamesToWin is the wins needed to take a series in each stage: group stage is
 // Bo5 (first to 3), bracket is Bo7 (first to 4).
@@ -55,6 +64,12 @@ type PredictionRow struct {
 	ParticipantID string
 	MatchID       string
 	Pick          string // models.PickA / models.PickB
+
+	// Benchmark marks a non-standard account (e.g. "The Coin", "Chat") that is
+	// scored normally but is NOT counted toward the cross-participant underdog
+	// tally. The zero value (false) is a normal participant, so existing
+	// PredictionRow literals need no change.
+	Benchmark bool
 }
 
 // ComputeScores returns participant_id → total score, given every match and
@@ -67,9 +82,13 @@ func ComputeScores(matches []models.Match, preds []PredictionRow) map[string]int
 	}
 
 	// Pick distribution: how many predictions chose each (match, side).
-	// Key is matchID + "|" + pick.
+	// Key is matchID + "|" + pick. Benchmark rows are skipped — they must not
+	// inflate the tally that decides whether a human's pick is an underdog.
 	pickCount := make(map[string]int)
 	for _, p := range preds {
+		if p.Benchmark {
+			continue
+		}
 		pickCount[p.MatchID+"|"+p.Pick]++
 	}
 
@@ -89,8 +108,10 @@ func pointsFor(m models.Match, p PredictionRow, pickCount map[string]int) int {
 	correct := m.Winner != nil && *m.Winner == p.Pick
 
 	if correct {
-		others := pickCount[p.MatchID+"|"+p.Pick] - 1 // minus self
-		if others < UnderdogMaxOthers {
+		// pickCount holds only human (non-benchmark) picks. A pick is an
+		// underdog pick when at most UnderdogMaxHumanPicks humans chose that
+		// side — the same test for every row, human or benchmark.
+		if pickCount[p.MatchID+"|"+p.Pick] <= UnderdogMaxHumanPicks {
 			return PointsCorrectUnderdog
 		}
 		return PointsCorrect
