@@ -194,3 +194,32 @@ func TestUnderdogSide(t *testing.T) {
 		})
 	}
 }
+
+func TestComputeStats_CorrectCount(t *testing.T) {
+	// Three completed matches. p1 picks correctly on all three. p2 picks
+	// correctly on m1, wrong on m2 (a Bo5 going the distance, so p2 gets the
+	// 1-point distance bonus but the pick is still wrong), and wrong on m3
+	// (no distance bonus). Correct should count picks that matched the
+	// winner, not points earned, so p1.Correct=3 and p2.Correct=1.
+	m1 := completedMatch("m1", models.StageGroup, models.PickA, 3, 1)
+	m2 := completedMatch("m2", models.StageGroup, models.PickB, 2, 3)
+	m3 := completedMatch("m3", models.StageGroup, models.PickA, 3, 0)
+
+	preds := []PredictionRow{
+		{ParticipantID: "p1", MatchID: "m1", Pick: models.PickA},
+		{ParticipantID: "p1", MatchID: "m2", Pick: models.PickB},
+		{ParticipantID: "p1", MatchID: "m3", Pick: models.PickA},
+		{ParticipantID: "p2", MatchID: "m1", Pick: models.PickA},
+		{ParticipantID: "p2", MatchID: "m2", Pick: models.PickA},
+		{ParticipantID: "p2", MatchID: "m3", Pick: models.PickB},
+	}
+
+	stats := ComputeStats([]models.Match{m1, m2, m3}, preds)
+
+	if stats["p1"].Correct != 3 {
+		t.Errorf("p1.Correct: got %d, want 3", stats["p1"].Correct)
+	}
+	if stats["p2"].Correct != 1 {
+		t.Errorf("p2.Correct: got %d, want 1", stats["p2"].Correct)
+	}
+}

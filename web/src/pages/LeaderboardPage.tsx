@@ -212,7 +212,7 @@ function LeaderboardRow({ rank, participant, completedCount, sim, onClick }: Lea
           </span>
 
           <span className="whitespace-nowrap pt-1 text-xs text-zinc-400">
-            {participant.score}/{completedCount} correct
+            {participant.correct_count}/{completedCount} correct
           </span>
 
           <span className="ml-auto flex items-start gap-2">

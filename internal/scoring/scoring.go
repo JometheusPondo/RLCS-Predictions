@@ -103,10 +103,18 @@ type PredictionRow struct {
 	Benchmark bool
 }
 
-// ComputeScores returns participant_id → total score, given every match and
-// every (real) participant's predictions. Only completed matches contribute;
-// a prediction whose match isn't in `matches` is ignored.
-func ComputeScores(matches []models.Match, preds []PredictionRow) map[string]int {
+// ParticipantStats is one participant's scoring output: total points and the
+// count of correctly-predicted matches.
+type ParticipantStats struct {
+	Score   int
+	Correct int
+}
+
+// ComputeStats returns per-participant score and correct-pick count from one
+// pass over the predictions. Only completed matches contribute. A pick is
+// correct when it matches the winner; bonuses don't affect the correct count,
+// and a wrong-but-distance pick still counts as wrong.
+func ComputeStats(matches []models.Match, preds []PredictionRow) map[string]ParticipantStats {
 	byID := make(map[string]models.Match, len(matches))
 	for _, m := range matches {
 		byID[m.ID] = m
@@ -123,13 +131,29 @@ func ComputeScores(matches []models.Match, preds []PredictionRow) map[string]int
 		pickCount[p.MatchID+"|"+p.Pick]++
 	}
 
-	scores := make(map[string]int)
+	out := make(map[string]ParticipantStats)
 	for _, p := range preds {
 		m, ok := byID[p.MatchID]
 		if !ok || m.Status != models.StatusCompleted {
 			continue
 		}
-		scores[p.ParticipantID] += pointsFor(m, p, pickCount)
+		s := out[p.ParticipantID]
+		s.Score += pointsFor(m, p, pickCount)
+		if m.Winner != nil && *m.Winner == p.Pick {
+			s.Correct++
+		}
+		out[p.ParticipantID] = s
+	}
+	return out
+}
+
+// ComputeScores returns participant_id to total score. Thin wrapper over
+// ComputeStats; kept for callers and tests that only need the score map.
+func ComputeScores(matches []models.Match, preds []PredictionRow) map[string]int {
+	stats := ComputeStats(matches, preds)
+	scores := make(map[string]int, len(stats))
+	for id, s := range stats {
+		scores[id] = s.Score
 	}
 	return scores
 }

@@ -73,12 +73,14 @@ func (db *DB) ListParticipants(ctx context.Context) ([]models.Participant, error
 		return nil, err
 	}
 
-	scores, err := db.computeAllScores(ctx)
+	stats, err := db.computeAllStats(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for i := range out {
-		out[i].Score = scores[out[i].ID]
+		s := stats[out[i].ID]
+		out[i].Score = s.Score
+		out[i].CorrectCount = s.Correct
 	}
 
 	// Attach winner-pick history. One query for all of it, grouped in Go —
@@ -255,13 +257,15 @@ func (db *DB) GetParticipantWithPredictions(ctx context.Context, id string) (*mo
 		return nil, err
 	}
 
-	// Score needs the global picture (the underdog rule counts across all
+	// Stats need the global picture (the underdog rule counts across all
 	// participants), so it's the same computation as the leaderboard.
-	scores, err := db.computeAllScores(ctx)
+	stats, err := db.computeAllStats(ctx)
 	if err != nil {
 		return nil, err
 	}
-	pwp.Score = scores[id]
+	s := stats[id]
+	pwp.Score = s.Score
+	pwp.CorrectCount = s.Correct
 
 	picks, err := db.winnerPicksFor(ctx, id)
 	if err != nil {
@@ -276,11 +280,11 @@ func (db *DB) GetParticipantWithPredictions(ctx context.Context, id string) (*mo
 // Scoring
 // =============================================================================
 
-// computeAllScores returns participant_id → total score, applying the scoring
-// rules in internal/scoring. The underdog rule needs the full cross-
-// participant pick distribution, so even a single participant's score is
-// derived from the global data set.
-func (db *DB) computeAllScores(ctx context.Context) (map[string]int, error) {
+// computeAllStats returns participant_id → score and correct-pick count,
+// applying the scoring rules in internal/scoring. The underdog rule needs the
+// full cross-participant pick distribution, so even a single participant's
+// stats are derived from the global data set.
+func (db *DB) computeAllStats(ctx context.Context) (map[string]scoring.ParticipantStats, error) {
 	matches, err := db.ListMatches(ctx)
 	if err != nil {
 		return nil, err
@@ -289,7 +293,7 @@ func (db *DB) computeAllScores(ctx context.Context) (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	return scoring.ComputeScores(matches, preds), nil
+	return scoring.ComputeStats(matches, preds), nil
 }
 
 // scoringPredictions returns every prediction as a scoring.PredictionRow,

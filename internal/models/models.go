@@ -38,10 +38,11 @@ const (
 // history of tournament-winner picks, oldest first; the last element is the
 // current pick. Empty slice when the participant has never picked.
 type Participant struct {
-	ID          string       `json:"id"`
-	DisplayName string       `json:"display_name"`
-	Score       int          `json:"score"`
-	WinnerPicks []WinnerPick `json:"winner_picks"`
+	ID           string       `json:"id"`
+	DisplayName  string       `json:"display_name"`
+	Score        int          `json:"score"`
+	CorrectCount int          `json:"correct_count"`
+	WinnerPicks  []WinnerPick `json:"winner_picks"`
 }
 
 // WinnerPick is one entry in a participant's tournament-winner pick history.

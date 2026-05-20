@@ -14,6 +14,10 @@ export interface Participant {
   id: string;
   display_name: string;
   score: number;
+  // Count of correctly-predicted completed matches. Distinct from `score`
+  // (points): a wrong-but-distance pick earns a consolation point but is not
+  // correct, and an underdog bonus doesn't multiply this count.
+  correct_count: number;
   // Append-only tournament-winner pick history, oldest first. The last element
   // is the current pick. Empty when the participant has never picked a winner.
   winner_picks: WinnerPick[];
