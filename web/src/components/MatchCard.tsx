@@ -43,7 +43,7 @@ export function MatchCard({ match, userPick, onPick, bypassLock = false }: Match
           teamName={match.team_a}
           state={a}
           align="left"
-          isUnderdog={match.underdog === 'A'}
+          isUnderdog={match.underdog?.side === 'A'}
           onClick={a.tappable ? () => onPick('A') : undefined}
         />
         <div className="flex shrink-0 items-center px-3 text-sm font-medium text-zinc-400">
@@ -53,10 +53,13 @@ export function MatchCard({ match, userPick, onPick, bypassLock = false }: Match
           teamName={match.team_b}
           state={b}
           align="right"
-          isUnderdog={match.underdog === 'B'}
+          isUnderdog={match.underdog?.side === 'B'}
           onClick={b.tappable ? () => onPick('B') : undefined}
         />
       </div>
+      {match.underdog && (
+        <UnderdogBadge side={match.underdog.side} picks={match.underdog.picks} />
+      )}
     </div>
   );
 }
@@ -64,13 +67,15 @@ export function MatchCard({ match, userPick, onPick, bypassLock = false }: Match
 // Side is a private helper — not a reusable component, just the left/right
 // half of a MatchCard. Renders as a <button> when tappable, a <div> otherwise.
 // Layout puts the logo on the card's outer edge: [logo name] on the left,
-// [name logo] on the right. When this side is the underdog, the "Underdog"
-// badge sits on the inner side of the name and an orange ring wraps the box.
+// [name logo] on the right. When this side is the underdog, an orange ring
+// wraps the box; the "Underdog: X picks" label lives in the card's footer
+// row, not inside this box.
 interface SideProps {
   teamName: string;
   state: SideState;
   align: 'left' | 'right';
-  // isUnderdog draws the orange underdog ring + "Underdog" badge on this side.
+  // isUnderdog draws the orange underdog ring on this side. The text label
+  // lives in the card's footer, not inside the box.
   isUnderdog: boolean;
   onClick?: () => void;
 }
@@ -90,11 +95,9 @@ function Side({ teamName, state, align, isUnderdog, onClick }: SideProps) {
       <>
         <TeamLogo teamName={teamName} />
         {name}
-        {isUnderdog && <UnderdogBadge />}
       </>
     ) : (
       <>
-        {isUnderdog && <UnderdogBadge />}
         {name}
         <TeamLogo teamName={teamName} />
       </>

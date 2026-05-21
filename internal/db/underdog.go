@@ -37,17 +37,17 @@ func (db *DB) ListMatchesWithUnderdog(ctx context.Context) ([]models.Match, erro
 		if !matches[i].Locked {
 			continue // reveal only once predictions are frozen
 		}
-		if side, ok := underdogs[matches[i].ID]; ok {
-			s := side
-			matches[i].Underdog = &s
+		if info, ok := underdogs[matches[i].ID]; ok {
+			matches[i].Underdog = &info
 		}
 	}
 	return matches, nil
 }
 
-// matchUnderdogs returns match_id → underdog side ("A" / "B") for every match
-// that has a single underdog side. The underdog is decided by scoring.Underdog-
-// Side from the per-match human pick counts.
+// matchUnderdogs returns match_id → UnderdogInfo (the underdog side and the
+// number of humans who picked it) for every match that has a single underdog
+// side. The underdog is decided by scoring.UnderdogSide from the per-match
+// human pick counts.
 //
 // "Human" picks exclude blast_admin and the benchmark accounts (The Coin,
 // Chat): scoringPredictions already drops the admin and flags the benchmarks,
@@ -57,7 +57,7 @@ func (db *DB) ListMatchesWithUnderdog(ctx context.Context) ([]models.Match, erro
 // The returned map is NOT gated by lock state; ListMatchesWithUnderdog applies
 // that gate. A match absent from the map has no underdog side (a tie, or no
 // minority side at or below the cutoff).
-func (db *DB) matchUnderdogs(ctx context.Context) (map[string]string, error) {
+func (db *DB) matchUnderdogs(ctx context.Context) (map[string]models.UnderdogInfo, error) {
 	preds, err := db.scoringPredictions(ctx)
 	if err != nil {
 		return nil, err
@@ -83,11 +83,17 @@ func (db *DB) matchUnderdogs(ctx context.Context) (map[string]string, error) {
 		}
 	}
 
-	out := make(map[string]string)
+	out := make(map[string]models.UnderdogInfo)
 	for matchID, c := range counts {
-		if side, ok := scoring.UnderdogSide(c.a, c.b); ok {
-			out[matchID] = side
+		side, ok := scoring.UnderdogSide(c.a, c.b)
+		if !ok {
+			continue
 		}
+		picks := c.a
+		if side == models.PickB {
+			picks = c.b
+		}
+		out[matchID] = models.UnderdogInfo{Side: side, Picks: picks}
 	}
 	return out, nil
 }

@@ -68,11 +68,10 @@ export interface Match {
   // or the match is completed). The server enforces this independently; the
   // UI uses it to gate tappability.
   locked: boolean;
-  // Computed server-side: which side ('A' | 'B') is the underdog pick — the
-  // team fewer humans picked — or null when there's no single underdog side.
-  // Revealed only once the match is locked (pick distribution frozen); always
-  // null while predictions can still change. See scoring.UnderdogSide.
-  underdog: Pick | null;
+  // Computed server-side: the underdog side and the number of humans who
+  // picked it, or null when the match has no single underdog. Revealed only
+  // once the match is locked (pick distribution frozen). See scoring.UnderdogSide.
+  underdog: { side: Pick; picks: number } | null;
 }
 
 export interface SyncStatus {

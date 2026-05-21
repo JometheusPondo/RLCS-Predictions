@@ -93,6 +93,13 @@ type Round struct {
 	Name      string `json:"name"`
 }
 
+// UnderdogInfo carries the underdog side of a match and the number of human
+// participants who picked it. Embedded as Match.Underdog.
+type UnderdogInfo struct {
+	Side  string `json:"side"`
+	Picks int    `json:"picks"`
+}
+
 // Match is the shape returned by GET /api/matches and used internally by the
 // match-source layer. Pointer fields are nullable: scores are nil until the
 // match plays, winner is nil until it completes, scheduled_at is nil if the
@@ -114,27 +121,25 @@ type Round struct {
 // match has started, or the match is completed). The frontend uses it to
 // gate tappability; the server also enforces it independently on writes.
 //
-// Underdog is also COMPUTED, not stored. It names the side ("A" / "B") that
-// is the underdog pick — the team fewer humans picked, see scoring.UnderdogSide
-// — or is nil when the match has no single underdog side. It is populated only
-// by ListMatchesWithUnderdog, and only on LOCKED matches: revealing the
-// underdog while predictions can still change would leak the crowd's lean, so
-// it stays nil until the pick distribution is frozen.
+// Underdog is also COMPUTED, not stored. It carries the underdog side and the
+// human-pick count for that side, or is nil when the match has no single
+// underdog. Set only by ListMatchesWithUnderdog and only on LOCKED matches,
+// so the crowd's lean isn't revealed while picks can still change.
 type Match struct {
-	ID           string  `json:"id"`
-	Round        Round   `json:"round"`
-	TeamA        string  `json:"team_a"`
-	TeamB        string  `json:"team_b"`
-	TeamAScore   *int    `json:"team_a_score"`
-	TeamBScore   *int    `json:"team_b_score"`
-	Winner       *string `json:"winner"`
-	Status       string  `json:"status"`
-	ScheduledAt  *string `json:"scheduled_at"`
-	PlaceholderA *string `json:"placeholder_a"`
-	PlaceholderB *string `json:"placeholder_b"`
-	Slot         *string `json:"slot"`
-	Locked       bool    `json:"locked"`
-	Underdog     *string `json:"underdog"`
+	ID           string        `json:"id"`
+	Round        Round         `json:"round"`
+	TeamA        string        `json:"team_a"`
+	TeamB        string        `json:"team_b"`
+	TeamAScore   *int          `json:"team_a_score"`
+	TeamBScore   *int          `json:"team_b_score"`
+	Winner       *string       `json:"winner"`
+	Status       string        `json:"status"`
+	ScheduledAt  *string       `json:"scheduled_at"`
+	PlaceholderA *string       `json:"placeholder_a"`
+	PlaceholderB *string       `json:"placeholder_b"`
+	Slot         *string       `json:"slot"`
+	Locked       bool          `json:"locked"`
+	Underdog     *UnderdogInfo `json:"underdog"`
 }
 
 // SyncStatus is the shape returned by GET /api/sync/status.

@@ -1,11 +1,20 @@
-// UnderdogBadge is the small "Underdog" annotation shown on the underdog team
-// of a match card — the side named by Match.underdog. It pairs with the orange
-// side ring (see sideRingClass). The backend only sets Match.underdog on locked
-// matches, so this never appears while predictions can still be changed.
-export function UnderdogBadge() {
+import type { Pick } from '../types/api';
+
+interface UnderdogBadgeProps {
+  side: Pick;
+  picks: number;
+}
+
+// UnderdogBadge is the "Underdog: X picks" footer row shown beneath a match
+// card's sides, aligned under the underdog team. The backend only sets
+// Match.underdog on locked matches, so this never appears while predictions
+// can still change.
+export function UnderdogBadge({ side, picks }: UnderdogBadgeProps) {
+  const align = side === 'B' ? 'text-right' : 'text-left';
+  const noun = picks === 1 ? 'pick' : 'picks';
   return (
-    <span className="shrink-0 rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-white">
-      Underdog
-    </span>
+    <div className={`bg-zinc-900 px-4 py-1 text-xs font-medium text-orange-400 ${align}`}>
+      Underdog: {picks} {noun}
+    </div>
   );
 }

@@ -1,0 +1,284 @@
+diff --git a/internal/db/underdog.go b/internal/db/underdog.go
+index 454eb84..2a5937d 100644
+--- a/internal/db/underdog.go
++++ b/internal/db/underdog.go
+@@ -37,17 +37,17 @@ func (db *DB) ListMatchesWithUnderdog(ctx context.Context) ([]models.Match, erro
+ 		if !matches[i].Locked {
+ 			continue // reveal only once predictions are frozen
+ 		}
+-		if side, ok := underdogs[matches[i].ID]; ok {
+-			s := side
+-			matches[i].Underdog = &s
++		if info, ok := underdogs[matches[i].ID]; ok {
++			matches[i].Underdog = &info
+ 		}
+ 	}
+ 	return matches, nil
+ }
+ 
+-// matchUnderdogs returns match_id → underdog side ("A" / "B") for every match
+-// that has a single underdog side. The underdog is decided by scoring.Underdog-
+-// Side from the per-match human pick counts.
++// matchUnderdogs returns match_id → UnderdogInfo (the underdog side and the
++// number of humans who picked it) for every match that has a single underdog
++// side. The underdog is decided by scoring.UnderdogSide from the per-match
++// human pick counts.
+ //
+ // "Human" picks exclude blast_admin and the benchmark accounts (The Coin,
+ // Chat): scoringPredictions already drops the admin and flags the benchmarks,
+@@ -57,7 +57,7 @@ func (db *DB) ListMatchesWithUnderdog(ctx context.Context) ([]models.Match, erro
+ // The returned map is NOT gated by lock state; ListMatchesWithUnderdog applies
+ // that gate. A match absent from the map has no underdog side (a tie, or no
+ // minority side at or below the cutoff).
+-func (db *DB) matchUnderdogs(ctx context.Context) (map[string]string, error) {
++func (db *DB) matchUnderdogs(ctx context.Context) (map[string]models.UnderdogInfo, error) {
+ 	preds, err := db.scoringPredictions(ctx)
+ 	if err != nil {
+ 		return nil, err
+@@ -83,11 +83,17 @@ func (db *DB) matchUnderdogs(ctx context.Context) (map[string]string, error) {
+ 		}
+ 	}
+ 
+-	out := make(map[string]string)
++	out := make(map[string]models.UnderdogInfo)
+ 	for matchID, c := range counts {
+-		if side, ok := scoring.UnderdogSide(c.a, c.b); ok {
+-			out[matchID] = side
++		side, ok := scoring.UnderdogSide(c.a, c.b)
++		if !ok {
++			continue
+ 		}
++		picks := c.a
++		if side == models.PickB {
++			picks = c.b
++		}
++		out[matchID] = models.UnderdogInfo{Side: side, Picks: picks}
+ 	}
+ 	return out, nil
+ }
+diff --git a/internal/models/models.go b/internal/models/models.go
+index e690b42..f9ddc3d 100644
+--- a/internal/models/models.go
++++ b/internal/models/models.go
+@@ -93,6 +93,13 @@ type Round struct {
+ 	Name      string `json:"name"`
+ }
+ 
++// UnderdogInfo carries the underdog side of a match and the number of human
++// participants who picked it. Embedded as Match.Underdog.
++type UnderdogInfo struct {
++	Side  string `json:"side"`
++	Picks int    `json:"picks"`
++}
++
+ // Match is the shape returned by GET /api/matches and used internally by the
+ // match-source layer. Pointer fields are nullable: scores are nil until the
+ // match plays, winner is nil until it completes, scheduled_at is nil if the
+@@ -114,27 +121,25 @@ type Round struct {
+ // match has started, or the match is completed). The frontend uses it to
+ // gate tappability; the server also enforces it independently on writes.
+ //
+-// Underdog is also COMPUTED, not stored. It names the side ("A" / "B") that
+-// is the underdog pick — the team fewer humans picked, see scoring.UnderdogSide
+-// — or is nil when the match has no single underdog side. It is populated only
+-// by ListMatchesWithUnderdog, and only on LOCKED matches: revealing the
+-// underdog while predictions can still change would leak the crowd's lean, so
+-// it stays nil until the pick distribution is frozen.
++// Underdog is also COMPUTED, not stored. It carries the underdog side and the
++// human-pick count for that side, or is nil when the match has no single
++// underdog. Set only by ListMatchesWithUnderdog and only on LOCKED matches,
++// so the crowd's lean isn't revealed while picks can still change.
+ type Match struct {
+-	ID           string  `json:"id"`
+-	Round        Round   `json:"round"`
+-	TeamA        string  `json:"team_a"`
+-	TeamB        string  `json:"team_b"`
+-	TeamAScore   *int    `json:"team_a_score"`
+-	TeamBScore   *int    `json:"team_b_score"`
+-	Winner       *string `json:"winner"`
+-	Status       string  `json:"status"`
+-	ScheduledAt  *string `json:"scheduled_at"`
+-	PlaceholderA *string `json:"placeholder_a"`
+-	PlaceholderB *string `json:"placeholder_b"`
+-	Slot         *string `json:"slot"`
+-	Locked       bool    `json:"locked"`
+-	Underdog     *string `json:"underdog"`
++	ID           string        `json:"id"`
++	Round        Round         `json:"round"`
++	TeamA        string        `json:"team_a"`
++	TeamB        string        `json:"team_b"`
++	TeamAScore   *int          `json:"team_a_score"`
++	TeamBScore   *int          `json:"team_b_score"`
++	Winner       *string       `json:"winner"`
++	Status       string        `json:"status"`
++	ScheduledAt  *string       `json:"scheduled_at"`
++	PlaceholderA *string       `json:"placeholder_a"`
++	PlaceholderB *string       `json:"placeholder_b"`
++	Slot         *string       `json:"slot"`
++	Locked       bool          `json:"locked"`
++	Underdog     *UnderdogInfo `json:"underdog"`
+ }
+ 
+ // SyncStatus is the shape returned by GET /api/sync/status.
+diff --git a/web/src/components/MatchCard.tsx b/web/src/components/MatchCard.tsx
+index 705701f..b2c77ee 100644
+--- a/web/src/components/MatchCard.tsx
++++ b/web/src/components/MatchCard.tsx
+@@ -43,7 +43,7 @@ export function MatchCard({ match, userPick, onPick, bypassLock = false }: Match
+           teamName={match.team_a}
+           state={a}
+           align="left"
+-          isUnderdog={match.underdog === 'A'}
++          isUnderdog={match.underdog?.side === 'A'}
+           onClick={a.tappable ? () => onPick('A') : undefined}
+         />
+         <div className="flex shrink-0 items-center px-3 text-sm font-medium text-zinc-400">
+@@ -53,10 +53,13 @@ export function MatchCard({ match, userPick, onPick, bypassLock = false }: Match
+           teamName={match.team_b}
+           state={b}
+           align="right"
+-          isUnderdog={match.underdog === 'B'}
++          isUnderdog={match.underdog?.side === 'B'}
+           onClick={b.tappable ? () => onPick('B') : undefined}
+         />
+       </div>
++      {match.underdog && (
++        <UnderdogBadge side={match.underdog.side} picks={match.underdog.picks} />
++      )}
+     </div>
+   );
+ }
+@@ -64,13 +67,15 @@ export function MatchCard({ match, userPick, onPick, bypassLock = false }: Match
+ // Side is a private helper — not a reusable component, just the left/right
+ // half of a MatchCard. Renders as a <button> when tappable, a <div> otherwise.
+ // Layout puts the logo on the card's outer edge: [logo name] on the left,
+-// [name logo] on the right. When this side is the underdog, the "Underdog"
+-// badge sits on the inner side of the name and an orange ring wraps the box.
++// [name logo] on the right. When this side is the underdog, an orange ring
++// wraps the box; the "Underdog: X picks" label lives in the card's footer
++// row, not inside this box.
+ interface SideProps {
+   teamName: string;
+   state: SideState;
+   align: 'left' | 'right';
+-  // isUnderdog draws the orange underdog ring + "Underdog" badge on this side.
++  // isUnderdog draws the orange underdog ring on this side. The text label
++  // lives in the card's footer, not inside the box.
+   isUnderdog: boolean;
+   onClick?: () => void;
+ }
+@@ -90,11 +95,9 @@ function Side({ teamName, state, align, isUnderdog, onClick }: SideProps) {
+       <>
+         <TeamLogo teamName={teamName} />
+         {name}
+-        {isUnderdog && <UnderdogBadge />}
+       </>
+     ) : (
+       <>
+-        {isUnderdog && <UnderdogBadge />}
+         {name}
+         <TeamLogo teamName={teamName} />
+       </>
+diff --git a/web/src/components/ReadOnlyMatchCard.tsx b/web/src/components/ReadOnlyMatchCard.tsx
+index 373c442..080bb58 100644
+--- a/web/src/components/ReadOnlyMatchCard.tsx
++++ b/web/src/components/ReadOnlyMatchCard.tsx
+@@ -23,8 +23,9 @@ const visualClasses: Record<SideVisual, string> = {
+ // using the § 7.2 color rules, but with no click handlers and no hover
+ // affordance — used in the leaderboard drawer (spec § 7.3) and for other
+ // users' profiles. Logos sit on the card's outer edges: [logo name] on the
+-// left, [name logo] on the right. The underdog team (Match.underdog, set only
+-// on locked matches) gets an orange ring and an "Underdog" badge.
++// left, [name logo] on the right. The underdog team (Match.underdog, set
++// only on locked matches) gets an orange ring; the "Underdog: X picks"
++// label sits in a footer row below the sides.
+ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
+   const a = sideState('A', match, userPick);
+   const b = sideState('B', match, userPick);
+@@ -37,8 +38,8 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
+   // "no prediction" label for upcoming/live matches the participant skipped.
+   const noPick = userPick === null && match.status !== 'completed';
+ 
+-  const aUnderdog = match.underdog === 'A';
+-  const bUnderdog = match.underdog === 'B';
++  const aUnderdog = match.underdog?.side === 'A';
++  const bUnderdog = match.underdog?.side === 'B';
+ 
+   return (
+     <div className="overflow-hidden rounded-lg border border-zinc-800">
+@@ -48,7 +49,6 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
+         >
+           <TeamLogo teamName={match.team_a} />
+           <span className="truncate">{match.team_a}</span>
+-          {aUnderdog && <UnderdogBadge />}
+         </div>
+         <div className="flex shrink-0 items-center px-3 text-sm font-medium text-zinc-400">
+           {center}
+@@ -56,11 +56,13 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
+         <div
+           className={`flex min-w-0 flex-1 items-center justify-end gap-2 px-4 py-3 text-right text-sm font-medium ${visualClasses[b.visual]} ${sideRingClass(b.visual, bUnderdog)}`}
+         >
+-          {bUnderdog && <UnderdogBadge />}
+           <span className="truncate">{match.team_b}</span>
+           <TeamLogo teamName={match.team_b} />
+         </div>
+       </div>
++      {match.underdog && (
++        <UnderdogBadge side={match.underdog.side} picks={match.underdog.picks} />
++      )}
+       {noPick && (
+         <div className="bg-zinc-900 px-4 py-1 text-center text-xs text-zinc-500">
+           no prediction
+diff --git a/web/src/components/UnderdogBadge.tsx b/web/src/components/UnderdogBadge.tsx
+index b0fec35..04c952c 100644
+--- a/web/src/components/UnderdogBadge.tsx
++++ b/web/src/components/UnderdogBadge.tsx
+@@ -1,11 +1,20 @@
+-// UnderdogBadge is the small "Underdog" annotation shown on the underdog team
+-// of a match card — the side named by Match.underdog. It pairs with the orange
+-// side ring (see sideRingClass). The backend only sets Match.underdog on locked
+-// matches, so this never appears while predictions can still be changed.
+-export function UnderdogBadge() {
++import type { Pick } from '../types/api';
++
++interface UnderdogBadgeProps {
++  side: Pick;
++  picks: number;
++}
++
++// UnderdogBadge is the "Underdog: X picks" footer row shown beneath a match
++// card's sides, aligned under the underdog team. The backend only sets
++// Match.underdog on locked matches, so this never appears while predictions
++// can still change.
++export function UnderdogBadge({ side, picks }: UnderdogBadgeProps) {
++  const align = side === 'B' ? 'text-right' : 'text-left';
++  const noun = picks === 1 ? 'pick' : 'picks';
+   return (
+-    <span className="shrink-0 rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-white">
+-      Underdog
+-    </span>
++    <div className={`bg-zinc-900 px-4 py-1 text-xs font-medium text-orange-400 ${align}`}>
++      Underdog: {picks} {noun}
++    </div>
+   );
+ }
+diff --git a/web/src/types/api.ts b/web/src/types/api.ts
+index 9f5d174..8f026e3 100644
+--- a/web/src/types/api.ts
++++ b/web/src/types/api.ts
+@@ -68,11 +68,10 @@ export interface Match {
+   // or the match is completed). The server enforces this independently; the
+   // UI uses it to gate tappability.
+   locked: boolean;
+-  // Computed server-side: which side ('A' | 'B') is the underdog pick — the
+-  // team fewer humans picked — or null when there's no single underdog side.
+-  // Revealed only once the match is locked (pick distribution frozen); always
+-  // null while predictions can still change. See scoring.UnderdogSide.
+-  underdog: Pick | null;
++  // Computed server-side: the underdog side and the number of humans who
++  // picked it, or null when the match has no single underdog. Revealed only
++  // once the match is locked (pick distribution frozen). See scoring.UnderdogSide.
++  underdog: { side: Pick; picks: number } | null;
+ }
+ 
+ export interface SyncStatus {

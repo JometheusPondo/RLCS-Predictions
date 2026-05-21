@@ -23,8 +23,9 @@ const visualClasses: Record<SideVisual, string> = {
 // using the § 7.2 color rules, but with no click handlers and no hover
 // affordance — used in the leaderboard drawer (spec § 7.3) and for other
 // users' profiles. Logos sit on the card's outer edges: [logo name] on the
-// left, [name logo] on the right. The underdog team (Match.underdog, set only
-// on locked matches) gets an orange ring and an "Underdog" badge.
+// left, [name logo] on the right. The underdog team (Match.underdog, set
+// only on locked matches) gets an orange ring; the "Underdog: X picks"
+// label sits in a footer row below the sides.
 export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
   const a = sideState('A', match, userPick);
   const b = sideState('B', match, userPick);
@@ -37,8 +38,8 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
   // "no prediction" label for upcoming/live matches the participant skipped.
   const noPick = userPick === null && match.status !== 'completed';
 
-  const aUnderdog = match.underdog === 'A';
-  const bUnderdog = match.underdog === 'B';
+  const aUnderdog = match.underdog?.side === 'A';
+  const bUnderdog = match.underdog?.side === 'B';
 
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-800">
@@ -48,7 +49,6 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
         >
           <TeamLogo teamName={match.team_a} />
           <span className="truncate">{match.team_a}</span>
-          {aUnderdog && <UnderdogBadge />}
         </div>
         <div className="flex shrink-0 items-center px-3 text-sm font-medium text-zinc-400">
           {center}
@@ -56,11 +56,13 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
         <div
           className={`flex min-w-0 flex-1 items-center justify-end gap-2 px-4 py-3 text-right text-sm font-medium ${visualClasses[b.visual]} ${sideRingClass(b.visual, bUnderdog)}`}
         >
-          {bUnderdog && <UnderdogBadge />}
           <span className="truncate">{match.team_b}</span>
           <TeamLogo teamName={match.team_b} />
         </div>
       </div>
+      {match.underdog && (
+        <UnderdogBadge side={match.underdog.side} picks={match.underdog.picks} />
+      )}
       {noPick && (
         <div className="bg-zinc-900 px-4 py-1 text-center text-xs text-zinc-500">
           no prediction
