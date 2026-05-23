@@ -1,0 +1,149 @@
+diff --git a/internal/matchsource/sheet.go b/internal/matchsource/sheet.go
+index 1edf1db..fa0eeff 100644
+--- a/internal/matchsource/sheet.go
++++ b/internal/matchsource/sheet.go
+@@ -232,6 +232,28 @@ func isResolvedTeamCell(brID string) bool {
+ 	return n >= 1 && n <= 16
+ }
+ 
++// looksLikePlaceholderTeamName reports whether a team-name cell holds the
++// sheet's "team not resolved yet" display text rather than an actual team
++// name. Used as a fallback by the bracket parser when br_id is unresolved
++// but the name cell already holds a real team — a sheet-template glitch
++// where the team-name formula resolved while the br_id helper formula did
++// not.
++//
++// Known placeholder shapes from the bracket template: stage-1 standings
++// like "Group A First" / "Group B Second" / "Group D Third"; bracket
++// references like "Winner of A" / "Loser of B"; formula-error values like
++// "#N/A" or "#REF!"; the empty string.
++func looksLikePlaceholderTeamName(name string) bool {
++	s := strings.TrimSpace(name)
++	if s == "" || strings.HasPrefix(s, "#") {
++		return true
++	}
++	lower := strings.ToLower(s)
++	return strings.HasPrefix(lower, "winner of ") ||
++		strings.HasPrefix(lower, "loser of ") ||
++		strings.HasPrefix(lower, "group ")
++}
++
+ // dayDates maps the sheet's "Day N" prefix to a calendar date for the match.
+ // The intra-day position ("2A", "5B") is kept separately in models.Match.Slot.
+ //
+diff --git a/internal/matchsource/sheet_bracket.go b/internal/matchsource/sheet_bracket.go
+index da5b341..2a02ad7 100644
+--- a/internal/matchsource/sheet_bracket.go
++++ b/internal/matchsource/sheet_bracket.go
+@@ -101,17 +101,21 @@ func parseBracketMatch(rows [][]string, br bracketRound, topRow int, label strin
+ 		return models.Match{}, false
+ 	}
+ 
+-	// Resolve each side independently. team_a / team_b stay empty for
+-	// placeholder sides; placeholder display text goes into PlaceholderA/B.
++	// Resolve each side independently. Primary check is br_id (the integer
++	// helper column 1-16). The team-name cell is a fallback for the case
++	// where the sheet's br_id formula hasn't resolved but the team-name
++	// formula has: if the name doesn't match a known placeholder pattern,
++	// trust it. team_a / team_b stay empty only for actual placeholder
++	// sides; placeholder display text goes into PlaceholderA / PlaceholderB.
+ 	var teamA, teamB string
+ 	var placeholderA, placeholderB *string
+ 
+-	if isResolvedTeamCell(brIDTop) {
++	if isResolvedTeamCell(brIDTop) || !looksLikePlaceholderTeamName(teamATop) {
+ 		teamA = normalizeTeamName(teamATop)
+ 	} else {
+ 		placeholderA = ptrStr(teamATop)
+ 	}
+-	if isResolvedTeamCell(brIDBot) {
++	if isResolvedTeamCell(brIDBot) || !looksLikePlaceholderTeamName(teamBBot) {
+ 		teamB = normalizeTeamName(teamBBot)
+ 	} else {
+ 		placeholderB = ptrStr(teamBBot)
+diff --git a/internal/matchsource/sheet_test.go b/internal/matchsource/sheet_test.go
+index 230c587..2f839cf 100644
+--- a/internal/matchsource/sheet_test.go
++++ b/internal/matchsource/sheet_test.go
+@@ -374,3 +374,81 @@ func TestIsResolvedTeamCell(t *testing.T) {
+ 		}
+ 	}
+ }
++
++func TestLooksLikePlaceholderTeamName(t *testing.T) {
++	placeholders := []string{
++		"",
++		"   ",
++		"#N/A",
++		"#REF!",
++		"#ERROR!",
++		"Winner of A",
++		"Winner of C",
++		"winner of g",
++		"WINNER OF B",
++		"Loser of A",
++		"Loser of B",
++		"Group A First",
++		"Group D Third",
++		"group b second",
++	}
++	realTeams := []string{
++		"Karmine Corp",
++		"Twisted Minds",
++		"FURIA",
++		"NRG",
++		"Team Vitality",
++		"Manchester City Esports",
++		"Spacestation Gaming",
++		"Ninjas in Pyjamas",
++		"FUT Esports",
++		"Made In Brazil",
++	}
++	for _, s := range placeholders {
++		if !looksLikePlaceholderTeamName(s) {
++			t.Errorf("expected %q to look like a placeholder", s)
++		}
++	}
++	for _, s := range realTeams {
++		if looksLikePlaceholderTeamName(s) {
++			t.Errorf("expected %q to NOT look like a placeholder", s)
++		}
++	}
++}
++
++func TestParseBracketCSV_TrustsRealTeamNameWhenBrIDUnresolved(t *testing.T) {
++	// Minimal in-memory CSV exercising the parser fallback. Six empty pad
++	// rows then one R2 bracket match (label col 9, team col 10, br_id col 11):
++	//   top side: real team name + br_id "#N/A" → fallback should resolve.
++	//   bottom side: placeholder text + br_id "#N/A" → stays unresolved.
++	rows := [][]string{
++		nil, nil, nil, nil, nil, nil,
++		{"", "", "", "", "", "", "", "", "", "G", "Twisted Minds", "#N/A", "0", "Day 4 5A"},
++		{"", "", "", "", "", "", "", "", "", "", "Winner of C", "#N/A", "0", ""},
++	}
++
++	matches, err := parseBracketCSV(rows, testTournamentID)
++	if err != nil {
++		t.Fatalf("parseBracketCSV: %v", err)
++	}
++	if len(matches) != 1 {
++		t.Fatalf("match count: got %d, want 1", len(matches))
++	}
++	m := matches[0]
++	if m.TeamA != "Twisted Minds" {
++		t.Errorf("TeamA: got %q, want %q (fallback should resolve real names)", m.TeamA, "Twisted Minds")
++	}
++	if m.PlaceholderA != nil {
++		t.Errorf("PlaceholderA: got %q, want nil", *m.PlaceholderA)
++	}
++	if m.TeamB != "" {
++		t.Errorf("TeamB: got %q, want empty (still a placeholder)", m.TeamB)
++	}
++	if m.PlaceholderB == nil || *m.PlaceholderB != "Winner of C" {
++		got := "<nil>"
++		if m.PlaceholderB != nil {
++			got = *m.PlaceholderB
++		}
++		t.Errorf("PlaceholderB: got %q, want %q", got, "Winner of C")
++	}
++}

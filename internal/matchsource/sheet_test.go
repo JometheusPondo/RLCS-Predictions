@@ -374,3 +374,81 @@ func TestIsResolvedTeamCell(t *testing.T) {
 		}
 	}
 }
+
+func TestLooksLikePlaceholderTeamName(t *testing.T) {
+	placeholders := []string{
+		"",
+		"   ",
+		"#N/A",
+		"#REF!",
+		"#ERROR!",
+		"Winner of A",
+		"Winner of C",
+		"winner of g",
+		"WINNER OF B",
+		"Loser of A",
+		"Loser of B",
+		"Group A First",
+		"Group D Third",
+		"group b second",
+	}
+	realTeams := []string{
+		"Karmine Corp",
+		"Twisted Minds",
+		"FURIA",
+		"NRG",
+		"Team Vitality",
+		"Manchester City Esports",
+		"Spacestation Gaming",
+		"Ninjas in Pyjamas",
+		"FUT Esports",
+		"Made In Brazil",
+	}
+	for _, s := range placeholders {
+		if !looksLikePlaceholderTeamName(s) {
+			t.Errorf("expected %q to look like a placeholder", s)
+		}
+	}
+	for _, s := range realTeams {
+		if looksLikePlaceholderTeamName(s) {
+			t.Errorf("expected %q to NOT look like a placeholder", s)
+		}
+	}
+}
+
+func TestParseBracketCSV_TrustsRealTeamNameWhenBrIDUnresolved(t *testing.T) {
+	// Minimal in-memory CSV exercising the parser fallback. Six empty pad
+	// rows then one R2 bracket match (label col 9, team col 10, br_id col 11):
+	//   top side: real team name + br_id "#N/A" → fallback should resolve.
+	//   bottom side: placeholder text + br_id "#N/A" → stays unresolved.
+	rows := [][]string{
+		nil, nil, nil, nil, nil, nil,
+		{"", "", "", "", "", "", "", "", "", "G", "Twisted Minds", "#N/A", "0", "Day 4 5A"},
+		{"", "", "", "", "", "", "", "", "", "", "Winner of C", "#N/A", "0", ""},
+	}
+
+	matches, err := parseBracketCSV(rows, testTournamentID)
+	if err != nil {
+		t.Fatalf("parseBracketCSV: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("match count: got %d, want 1", len(matches))
+	}
+	m := matches[0]
+	if m.TeamA != "Twisted Minds" {
+		t.Errorf("TeamA: got %q, want %q (fallback should resolve real names)", m.TeamA, "Twisted Minds")
+	}
+	if m.PlaceholderA != nil {
+		t.Errorf("PlaceholderA: got %q, want nil", *m.PlaceholderA)
+	}
+	if m.TeamB != "" {
+		t.Errorf("TeamB: got %q, want empty (still a placeholder)", m.TeamB)
+	}
+	if m.PlaceholderB == nil || *m.PlaceholderB != "Winner of C" {
+		got := "<nil>"
+		if m.PlaceholderB != nil {
+			got = *m.PlaceholderB
+		}
+		t.Errorf("PlaceholderB: got %q, want %q", got, "Winner of C")
+	}
+}

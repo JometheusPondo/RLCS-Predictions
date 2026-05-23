@@ -101,17 +101,21 @@ func parseBracketMatch(rows [][]string, br bracketRound, topRow int, label strin
 		return models.Match{}, false
 	}
 
-	// Resolve each side independently. team_a / team_b stay empty for
-	// placeholder sides; placeholder display text goes into PlaceholderA/B.
+	// Resolve each side independently. Primary check is br_id (the integer
+	// helper column 1-16). The team-name cell is a fallback for the case
+	// where the sheet's br_id formula hasn't resolved but the team-name
+	// formula has: if the name doesn't match a known placeholder pattern,
+	// trust it. team_a / team_b stay empty only for actual placeholder
+	// sides; placeholder display text goes into PlaceholderA / PlaceholderB.
 	var teamA, teamB string
 	var placeholderA, placeholderB *string
 
-	if isResolvedTeamCell(brIDTop) {
+	if isResolvedTeamCell(brIDTop) || !looksLikePlaceholderTeamName(teamATop) {
 		teamA = normalizeTeamName(teamATop)
 	} else {
 		placeholderA = ptrStr(teamATop)
 	}
-	if isResolvedTeamCell(brIDBot) {
+	if isResolvedTeamCell(brIDBot) || !looksLikePlaceholderTeamName(teamBBot) {
 		teamB = normalizeTeamName(teamBBot)
 	} else {
 		placeholderB = ptrStr(teamBBot)

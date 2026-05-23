@@ -232,6 +232,28 @@ func isResolvedTeamCell(brID string) bool {
 	return n >= 1 && n <= 16
 }
 
+// looksLikePlaceholderTeamName reports whether a team-name cell holds the
+// sheet's "team not resolved yet" display text rather than an actual team
+// name. Used as a fallback by the bracket parser when br_id is unresolved
+// but the name cell already holds a real team — a sheet-template glitch
+// where the team-name formula resolved while the br_id helper formula did
+// not.
+//
+// Known placeholder shapes from the bracket template: stage-1 standings
+// like "Group A First" / "Group B Second" / "Group D Third"; bracket
+// references like "Winner of A" / "Loser of B"; formula-error values like
+// "#N/A" or "#REF!"; the empty string.
+func looksLikePlaceholderTeamName(name string) bool {
+	s := strings.TrimSpace(name)
+	if s == "" || strings.HasPrefix(s, "#") {
+		return true
+	}
+	lower := strings.ToLower(s)
+	return strings.HasPrefix(lower, "winner of ") ||
+		strings.HasPrefix(lower, "loser of ") ||
+		strings.HasPrefix(lower, "group ")
+}
+
 // dayDates maps the sheet's "Day N" prefix to a calendar date for the match.
 // The intra-day position ("2A", "5B") is kept separately in models.Match.Slot.
 //
