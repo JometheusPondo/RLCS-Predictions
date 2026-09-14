@@ -53,6 +53,9 @@ func NewRouter(d Deps) http.Handler {
 		// is present, otherwise the request proceeds anonymously. Per-endpoint
 		// auth requirements are enforced in the handlers.
 		r.Use(authMiddleware(d.DB, d.Logger))
+		r.Use(s.selectEvent)
+		r.Get("/events", s.listEvents)
+		r.Get("/teams", s.listTeams)
 
 		r.Get("/health", s.health)
 		r.Get("/matches", s.listMatches)

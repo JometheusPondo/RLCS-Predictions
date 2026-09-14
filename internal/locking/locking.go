@@ -58,7 +58,7 @@ func BuildSchedule(matches []models.Match) Schedule {
 		if !ok {
 			continue
 		}
-		date := t.Format(dateLayout)
+		date := matchDay(m, t)
 		if date > s.finalDay {
 			s.finalDay = date
 		}
@@ -83,12 +83,16 @@ func (s Schedule) IsLocked(m models.Match, now time.Time) bool {
 	if m.Status == models.StatusCompleted {
 		return true
 	}
+	if m.Round.Stage == models.StagePlayIn {
+		start, known := parseScheduled(m)
+		return startedPerMatch(m) || (known && hasRealStart(start) && !now.Before(start))
+	}
 
 	t, ok := parseScheduled(m)
 	if !ok {
 		return startedPerMatch(m)
 	}
-	date := t.Format(dateLayout)
+	date := matchDay(m, t)
 
 	if date == s.finalDay {
 		return startedPerMatch(m)
@@ -103,6 +107,13 @@ func (s Schedule) IsLocked(m models.Match, now time.Time) bool {
 // "upcoming" state — i.e. once it has received its first game update.
 func startedPerMatch(m models.Match) bool {
 	return m.Status != models.StatusUpcoming
+}
+
+func matchDay(m models.Match, t time.Time) string {
+	if m.EventDate != nil {
+		return *m.EventDate
+	}
+	return t.Format(dateLayout)
 }
 
 // parseScheduled parses a match's ScheduledAt into a UTC time. ok is false

@@ -188,5 +188,9 @@ func wentTheDistance(m models.Match) bool {
 	if m.TeamBScore != nil {
 		b = *m.TeamBScore
 	}
-	return a+b == 2*gamesToWin(m.Round.Stage)-1
+	bestOf := m.BestOf
+	if bestOf == 0 {
+		bestOf = 2*gamesToWin(m.Round.Stage) - 1
+	}
+	return a+b == bestOf
 }

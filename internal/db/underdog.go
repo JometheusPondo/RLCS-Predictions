@@ -24,7 +24,7 @@ import (
 // This is the only caller of matchUnderdogs; ListMatches stays free of the
 // extra pick-count query for the callers (write checks, the simulation) that
 // don't need it.
-func (db *DB) ListMatchesWithUnderdog(ctx context.Context) ([]models.Match, error) {
+func (db *EventStore) ListMatchesWithUnderdog(ctx context.Context) ([]models.Match, error) {
 	matches, err := db.ListMatches(ctx)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func (db *DB) ListMatchesWithUnderdog(ctx context.Context) ([]models.Match, erro
 // The returned map is NOT gated by lock state; ListMatchesWithUnderdog applies
 // that gate. A match absent from the map has no underdog side (a tie, or no
 // minority side at or below the cutoff).
-func (db *DB) matchUnderdogs(ctx context.Context) (map[string]models.UnderdogInfo, error) {
+func (db *EventStore) matchUnderdogs(ctx context.Context) (map[string]models.UnderdogInfo, error) {
 	preds, err := db.scoringPredictions(ctx)
 	if err != nil {
 		return nil, err

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -42,13 +41,15 @@ func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 
 // syncStatus folds the poller's in-memory LastError() into the persisted
 // last_synced_at. Per Phase 3 design, last_error is NOT persisted in the DB.
-func (s *server) syncStatus(w http.ResponseWriter, _ *http.Request) {
+func (s *server) syncStatus(w http.ResponseWriter, r *http.Request) {
 	status := models.SyncStatus{
-		LastSyncedAt: s.deps.Tournament.LastSyncedAt,
+		LastSyncedAt: s.event(r).LastSyncedAt,
 	}
-	if e := s.deps.Poller.LastError(); e != nil {
-		msg := e.Error()
-		status.LastError = &msg
+	if s.event(r).IsActive && s.deps.Poller != nil {
+		if e := s.deps.Poller.LastError(); e != nil {
+			msg := e.Error()
+			status.LastError = &msg
+		}
 	}
 	writeJSON(w, http.StatusOK, status)
 }
@@ -58,7 +59,7 @@ func (s *server) syncStatus(w http.ResponseWriter, _ *http.Request) {
 // =============================================================================
 
 func (s *server) listMatches(w http.ResponseWriter, r *http.Request) {
-	matches, err := s.deps.DB.ListMatchesWithUnderdog(r.Context())
+	matches, err := s.eventDB(r).ListMatchesWithUnderdog(r.Context())
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -81,7 +82,11 @@ type simulationResponse struct {
 // the current day (see internal/simulation). It never alters the leaderboard;
 // the frontend overlays these deltas onto the real, points-sorted board.
 func (s *server) getSimulation(w http.ResponseWriter, r *http.Request) {
-	day, results, err := s.deps.DB.SimulateProjection(r.Context())
+	if !s.event(r).IsActive {
+		writeJSON(w, http.StatusOK, simulationResponse{Results: []simulation.Result{}})
+		return
+	}
+	day, results, err := s.eventDB(r).SimulateProjection(r.Context())
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -102,7 +107,7 @@ func (s *server) getSimulation(w http.ResponseWriter, r *http.Request) {
 // =============================================================================
 
 func (s *server) listParticipants(w http.ResponseWriter, r *http.Request) {
-	ps, err := s.deps.DB.ListParticipants(r.Context())
+	ps, err := s.eventDB(r).ListParticipants(r.Context())
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -154,7 +159,7 @@ func (s *server) createParticipant(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) getParticipant(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	p, err := s.deps.DB.GetParticipantWithPredictions(r.Context(), id)
+	p, err := s.eventDB(r).GetParticipantWithPredictions(r.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found", "participant not found")
 		return
@@ -167,8 +172,8 @@ func (s *server) getParticipant(w http.ResponseWriter, r *http.Request) {
 	// Permission filter: viewing your own profile (or being blast_admin) shows
 	// every prediction; anyone else sees only predictions on completed matches.
 	// In-progress picks stay private. Winner-pick history is always public.
-	if !canSeeAllPredictions(r, id) {
-		filtered, err := s.filterToCompleted(r.Context(), p.Predictions)
+	if s.event(r).IsActive && !canSeeAllPredictions(r, id) {
+		filtered, err := s.filterToCompleted(r, p.Predictions)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
@@ -181,8 +186,8 @@ func (s *server) getParticipant(w http.ResponseWriter, r *http.Request) {
 
 // filterToCompleted returns only the predictions whose match has completed.
 // Used to hide a participant's in-progress picks from other users.
-func (s *server) filterToCompleted(ctx context.Context, preds []models.Prediction) ([]models.Prediction, error) {
-	matches, err := s.deps.DB.ListMatches(ctx)
+func (s *server) filterToCompleted(r *http.Request, preds []models.Prediction) ([]models.Prediction, error) {
+	matches, err := s.eventDB(r).ListMatches(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +299,7 @@ func (s *server) setWinnerPick(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate team_name against the tournament's actual teams.
-	teams, err := s.deps.DB.ListTeamNames(r.Context())
+	teams, err := s.eventDB(r).ListTeamNames(r.Context())
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -311,7 +316,7 @@ func (s *server) setWinnerPick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.deps.DB.AddWinnerPick(r.Context(), id, req.TeamName); err != nil {
+	if err := s.eventDB(r).AddWinnerPick(r.Context(), id, req.TeamName); err != nil {
 		if errors.Is(err, db.ErrWinnerPickLocked) {
 			writeError(w, http.StatusBadRequest, "winner_pick_locked",
 				"the tournament has started, winner picks are locked")
@@ -323,7 +328,7 @@ func (s *server) setWinnerPick(w http.ResponseWriter, r *http.Request) {
 
 	// Return the updated participant. This path is self-or-admin only, so
 	// returning unfiltered predictions leaks nothing.
-	p, err := s.deps.DB.GetParticipantWithPredictions(r.Context(), id)
+	p, err := s.eventDB(r).GetParticipantWithPredictions(r.Context(), id)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -362,8 +367,12 @@ func (s *server) setPrediction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.deps.DB.SetPrediction(r.Context(), pid, mid, req.Pick)
+	err := s.eventDB(r).SetPrediction(r.Context(), pid, mid, req.Pick)
 	switch {
+	case errors.Is(err, db.ErrTeamsUnresolved):
+		writeError(w, http.StatusBadRequest, "teams_unresolved", err.Error())
+	case errors.Is(err, db.ErrEventReadOnly):
+		writeError(w, http.StatusForbidden, "event_read_only", err.Error())
 	case errors.Is(err, db.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "participant or match not found")
 	case errors.Is(err, db.ErrPredictionsLocked):
@@ -384,8 +393,10 @@ func (s *server) deletePrediction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.deps.DB.DeletePrediction(r.Context(), pid, mid)
+	err := s.eventDB(r).DeletePrediction(r.Context(), pid, mid)
 	switch {
+	case errors.Is(err, db.ErrEventReadOnly):
+		writeError(w, http.StatusForbidden, "event_read_only", err.Error())
 	case errors.Is(err, db.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "prediction, participant, or match not found")
 	case errors.Is(err, db.ErrPredictionsLocked):

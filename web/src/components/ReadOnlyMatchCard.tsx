@@ -48,7 +48,7 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
           className={`flex min-w-0 flex-1 items-center justify-start gap-2 px-4 py-3 text-left text-sm font-medium ${visualClasses[a.visual]} ${sideRingClass(a.visual, aUnderdog)}`}
         >
           <TeamLogo teamName={match.team_a} />
-          <span className="truncate">{match.team_a}</span>
+          <span>{match.team_a || match.placeholder_a || 'Team to be confirmed'}</span>
         </div>
         <div className="flex shrink-0 items-center px-3 text-sm font-medium text-zinc-400">
           {center}
@@ -56,7 +56,7 @@ export function ReadOnlyMatchCard({ match, userPick }: ReadOnlyMatchCardProps) {
         <div
           className={`flex min-w-0 flex-1 items-center justify-end gap-2 px-4 py-3 text-right text-sm font-medium ${visualClasses[b.visual]} ${sideRingClass(b.visual, bUnderdog)}`}
         >
-          <span className="truncate">{match.team_b}</span>
+          <span>{match.team_b || match.placeholder_b || 'Team to be confirmed'}</span>
           <TeamLogo teamName={match.team_b} />
         </div>
       </div>

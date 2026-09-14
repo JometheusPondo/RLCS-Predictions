@@ -7,6 +7,33 @@ export interface RoundGroup {
   matches: Match[];
 }
 
+export interface DayGroup {
+  date: string;
+  title: string;
+  rounds: RoundGroup[];
+}
+
+export function groupMatchesByDay(matches: Match[]): DayGroup[] {
+  const byDay = new Map<string, Match[]>();
+  for (const match of matches) {
+    const date = match.event_date ?? match.scheduled_at?.slice(0, 10) ?? '';
+    const day = byDay.get(date) ?? [];
+    day.push(match);
+    byDay.set(date, day);
+  }
+
+  const format = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC',
+  });
+  return [...byDay.entries()]
+    .sort(([a], [b]) => (a || '9999').localeCompare(b || '9999'))
+    .map(([date, dayMatches]) => ({
+      date,
+      title: date ? format.format(new Date(`${date}T12:00:00Z`)) : 'Schedule to be confirmed',
+      rounds: groupMatchesByRound(dayMatches),
+    }));
+}
+
 // groupMatchesByRound buckets matches by round name, orders the groups by
 // round.sort_order (ascending — group stage before bracket), and orders
 // matches within each group by scheduled time (unscheduled last), then id
@@ -23,7 +50,7 @@ export function groupMatchesByRound(matches: Match[]): RoundGroup[] {
   }
 
   const result = [...groups.values()];
-  result.sort((a, b) => a.round.sort_order - b.round.sort_order);
+  result.sort((a, b) => a.round.sort_order - b.round.sort_order || a.round.name.localeCompare(b.round.name));
   for (const group of result) {
     group.matches.sort(compareMatches);
   }
@@ -31,14 +58,18 @@ export function groupMatchesByRound(matches: Match[]): RoundGroup[] {
 }
 
 function compareMatches(a: Match, b: Match): number {
-  if (a.scheduled_at && b.scheduled_at) {
-    const cmp = a.scheduled_at.localeCompare(b.scheduled_at);
+  const aTime = a.scheduled_at?.endsWith('T00:00:00Z') ? null : a.scheduled_at;
+  const bTime = b.scheduled_at?.endsWith('T00:00:00Z') ? null : b.scheduled_at;
+  if (aTime && bTime) {
+    const cmp = aTime.localeCompare(bTime);
     if (cmp !== 0) return cmp;
-  } else if (a.scheduled_at) {
+  } else if (aTime) {
     return -1; // a scheduled, b not → a first
-  } else if (b.scheduled_at) {
+  } else if (bTime) {
     return 1; // b scheduled, a not → b first
   }
+  const slotOrder = (a.slot ?? '').localeCompare(b.slot ?? '', undefined, { numeric: true });
+  if (slotOrder !== 0) return slotOrder;
   return a.id.localeCompare(b.id);
 }
 
@@ -82,11 +113,12 @@ export function sideState(
   bypassLock = false,
 ): SideState {
   const completed = match.status === 'completed';
+  const resolved = Boolean(match.team_a && match.team_b && !match.placeholder_a && !match.placeholder_b);
 
   if (!completed) {
     return {
       visual: userPick === side ? 'blue' : 'neutral',
-      tappable: bypassLock || !match.locked,
+      tappable: resolved && (bypassLock || !match.locked),
     };
   }
 

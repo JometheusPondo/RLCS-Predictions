@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '../api/client';
-import { groupMatchesByRound } from '../lib/matches';
+import { useEvent } from '../lib/events';
 import { ADMIN_ID, useAuth } from '../lib/auth';
 import { Drawer } from '../components/Drawer';
-import { ReadOnlyMatchCard } from '../components/ReadOnlyMatchCard';
+import { DayMatches } from '../components/DayMatches';
 import { SkeletonRow } from '../components/Skeleton';
 import { WinnerPickStrip } from '../components/WinnerPickStrip';
 import type { Match, Participant, Pick, SimulationResult } from '../types/api';
@@ -34,23 +34,28 @@ function formatDay(iso: string): string {
 // all their picks for the day hit or miss. The projection is an annotation
 // only — the leaderboard itself is always ordered by real points.
 export function LeaderboardPage() {
+  const { event } = useEvent();
   const participantsQuery = useQuery({
-    queryKey: ['participants'],
-    queryFn: api.getParticipants,
+    queryKey: ['participants', event.id],
+    queryFn: () => api.getParticipants(event.id),
+    refetchInterval: event.is_active ? 30_000 : false,
   });
 
   // Matches are fetched once for the drawer's round grouping and for the
   // "x/y correct" denominator (count of completed matches).
   const matchesQuery = useQuery({
-    queryKey: ['matches'],
-    queryFn: api.getMatches,
+    queryKey: ['matches', event.id],
+    queryFn: () => api.getMatches(event.id),
+    refetchInterval: event.is_active ? 30_000 : false,
   });
 
   // Best/worst-case day projection. A failure here is non-fatal — the
   // leaderboard renders fine without the swing boxes.
   const simulationQuery = useQuery({
-    queryKey: ['simulation'],
-    queryFn: api.getSimulation,
+    queryKey: ['simulation', event.id],
+    queryFn: () => api.getSimulation(event.id),
+    refetchInterval: event.is_active ? 30_000 : false,
+    enabled: event.is_active,
   });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -89,6 +94,10 @@ export function LeaderboardPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-6">
       <h1 className="text-2xl font-semibold tracking-tight">Leaderboard</h1>
+      <p className="mt-1 text-sm text-zinc-400">{event.name}{event.is_active ? ' · All formats' : ' · Archived results'}</p>
+      {!event.is_active && matchesQuery.data && completedCount === 0 && (
+        <p className="mt-4 rounded-md border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-400">No completed results are stored for this event in this database.</p>
+      )}
 
       {simDay && (
         <p className="mt-1 text-sm text-zinc-500">
@@ -200,7 +209,7 @@ function LeaderboardRow({ rank, participant, completedCount, sim, onClick }: Lea
         onClick={onClick}
         className="flex w-full flex-col gap-2 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3 text-left transition-colors duration-150 hover:bg-zinc-800"
       >
-        <div className="flex w-full items-start gap-4">
+        <div className="flex w-full flex-wrap items-start gap-x-4 gap-y-2">
           <span className="flex items-center gap-2 pt-1">
             <span className="w-6 text-sm font-semibold text-zinc-500">{rank}</span>
             <span className="text-sm font-medium text-zinc-100">
@@ -215,7 +224,7 @@ function LeaderboardRow({ rank, participant, completedCount, sim, onClick }: Lea
             {participant.correct_count}/{completedCount} correct
           </span>
 
-          <span className="ml-auto flex items-start gap-2">
+          <span className="flex w-full items-start gap-2 sm:ml-auto sm:w-auto">
             <span className="whitespace-nowrap pt-1 text-xs text-zinc-500">
               Predicted Winner:
             </span>
@@ -246,17 +255,14 @@ interface DrawerBodyProps {
 }
 
 function DrawerBody({ participantId, matches, matchesPending, matchesError }: DrawerBodyProps) {
+  const { event } = useEvent();
   const auth = useAuth();
 
   const participantQuery = useQuery({
-    queryKey: ['participant', participantId, auth],
-    queryFn: () => api.getParticipant(participantId),
+    queryKey: ['participant', event.id, participantId, auth],
+    queryFn: () => api.getParticipant(participantId, event.id),
+    refetchInterval: event.is_active ? 30_000 : false,
   });
-
-  const grouped = useMemo(
-    () => (matches ? groupMatchesByRound(matches) : []),
-    [matches],
-  );
 
   if (matchesPending || participantQuery.isPending) {
     return <p className="text-sm text-zinc-500">Loading picks…</p>;
@@ -271,7 +277,7 @@ function DrawerBody({ participantId, matches, matchesPending, matchesError }: Dr
     );
   }
 
-  if (grouped.length === 0) {
+  if (!matches?.length) {
     return <p className="text-sm text-zinc-500">No matches yet.</p>;
   }
 
@@ -280,23 +286,6 @@ function DrawerBody({ participantId, matches, matchesPending, matchesError }: Dr
     picks.find((p) => p.match_id === matchId)?.pick ?? null;
 
   return (
-    <div className="space-y-6">
-      {grouped.map((group) => (
-        <section key={group.round.name} className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-            {group.round.name}
-          </h3>
-          <div className="space-y-2">
-            {group.matches.map((match) => (
-              <ReadOnlyMatchCard
-                key={match.id}
-                match={match}
-                userPick={pickFor(match.id)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
+    <DayMatches matches={matches} pickForMatch={pickFor} />
   );
 }

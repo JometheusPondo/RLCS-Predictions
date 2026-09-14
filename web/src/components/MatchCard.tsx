@@ -40,7 +40,7 @@ export function MatchCard({ match, userPick, onPick, bypassLock = false }: Match
     <div className="overflow-hidden rounded-lg border border-zinc-800">
       <div className="flex items-stretch">
         <Side
-          teamName={match.team_a}
+          teamName={match.team_a || match.placeholder_a || 'Team to be confirmed'}
           state={a}
           align="left"
           isUnderdog={match.underdog?.side === 'A'}
@@ -50,7 +50,7 @@ export function MatchCard({ match, userPick, onPick, bypassLock = false }: Match
           {center}
         </div>
         <Side
-          teamName={match.team_b}
+          teamName={match.team_b || match.placeholder_b || 'Team to be confirmed'}
           state={b}
           align="right"
           isUnderdog={match.underdog?.side === 'B'}
@@ -89,7 +89,7 @@ function Side({ teamName, state, align, isUnderdog, onClick }: SideProps) {
     onClick ? 'cursor-pointer hover:brightness-110' : 'cursor-default',
   ].join(' ');
 
-  const name = <span className="truncate">{teamName}</span>;
+  const name = <span>{teamName}</span>;
   const content =
     align === 'left' ? (
       <>
@@ -105,7 +105,7 @@ function Side({ teamName, state, align, isUnderdog, onClick }: SideProps) {
 
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={className}>
+      <button type="button" aria-pressed={state.visual === 'blue'} onClick={onClick} className={className}>
         {content}
       </button>
     );

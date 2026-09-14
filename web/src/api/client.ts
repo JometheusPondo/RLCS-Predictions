@@ -14,6 +14,7 @@ import type {
   SyncStatus,
   ApiErrorBody,
   LoginResponse,
+  Tournament,
 } from '../types/api';
 import { getToken } from '../lib/auth';
 
@@ -31,7 +32,7 @@ export class ApiClientError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, eventId?: number): Promise<T> {
   // Content-Type is only required on requests with a body. Setting it on GETs
   // is harmless but the Go backend's middleware skips bodyless requests anyway.
   const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) };
@@ -47,7 +48,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+  const eventQuery = eventId === undefined ? '' : `?event=${eventId}`;
+  const res = await fetch(`${BASE}${path}${eventQuery}`, { ...init, headers });
 
   if (!res.ok) {
     let body: ApiErrorBody | null = null;
@@ -72,17 +74,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  getMatches: (): Promise<Match[]> => request<Match[]>('/matches'),
+  getEvents: (): Promise<Tournament[]> => request<Tournament[]>('/events'),
 
-  getParticipants: (): Promise<Participant[]> => request<Participant[]>('/participants'),
+  getTeams: (eventId: number): Promise<string[]> => request<string[]>('/teams', undefined, eventId),
 
-  getParticipant: (id: string): Promise<ParticipantWithPredictions> =>
-    request<ParticipantWithPredictions>(`/participants/${encodeURIComponent(id)}`),
+  getMatches: (eventId: number): Promise<Match[]> => request<Match[]>('/matches', undefined, eventId),
+
+  getParticipants: (eventId: number): Promise<Participant[]> => request<Participant[]>('/participants', undefined, eventId),
+
+  getParticipant: (id: string, eventId: number): Promise<ParticipantWithPredictions> =>
+    request<ParticipantWithPredictions>(`/participants/${encodeURIComponent(id)}`, undefined, eventId),
 
   // getSimulation returns the best-case / worst-case standings projection for
   // the current day. It never alters the leaderboard — the caller overlays the
   // per-participant deltas onto the real, points-sorted board.
-  getSimulation: (): Promise<SimulationResponse> => request<SimulationResponse>('/simulation'),
+  getSimulation: (eventId: number): Promise<SimulationResponse> => request<SimulationResponse>('/simulation', undefined, eventId),
 
   // NOTE: self-registration is currently disabled — POST /api/participants is
   // not registered on the backend, so calling this will 404. Kept for when an
@@ -93,16 +99,18 @@ export const api = {
       body: JSON.stringify({ display_name }),
     }),
 
-  setPrediction: (participantId: string, matchId: string, pick: Pick): Promise<Prediction> =>
+  setPrediction: (participantId: string, matchId: string, pick: Pick, eventId: number): Promise<Prediction> =>
     request<Prediction>(
       `/participants/${encodeURIComponent(participantId)}/predictions/${encodeURIComponent(matchId)}`,
       { method: 'PUT', body: JSON.stringify({ pick }) },
+      eventId,
     ),
 
-  deletePrediction: (participantId: string, matchId: string): Promise<void> =>
+  deletePrediction: (participantId: string, matchId: string, eventId: number): Promise<void> =>
     request<void>(
       `/participants/${encodeURIComponent(participantId)}/predictions/${encodeURIComponent(matchId)}`,
       { method: 'DELETE' },
+      eventId,
     ),
 
   getSyncStatus: (): Promise<SyncStatus> => request<SyncStatus>('/sync/status'),
@@ -117,9 +125,10 @@ export const api = {
 
   // setWinnerPick appends a tournament-winner pick. Auth-gated server-side to
   // the participant themselves or blast_admin. Returns the updated participant.
-  setWinnerPick: (participantId: string, teamName: string): Promise<ParticipantWithPredictions> =>
+  setWinnerPick: (participantId: string, teamName: string, eventId: number): Promise<ParticipantWithPredictions> =>
     request<ParticipantWithPredictions>(
       `/participants/${encodeURIComponent(participantId)}/winner`,
       { method: 'PUT', body: JSON.stringify({ team_name: teamName }) },
+      eventId,
     ),
 };

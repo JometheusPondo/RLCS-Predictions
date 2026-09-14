@@ -18,9 +18,11 @@ const (
 
 // Config bundles all runtime configuration. Loaded once at startup.
 type Config struct {
-	Port         string
-	DatabasePath string
-	LogLevel     slog.Level
+	ActiveEvent         string
+	WorldsSpreadsheetID string
+	Port                string
+	DatabasePath        string
+	LogLevel            slog.Level
 
 	// MatchSource is the active source for tournament data. Either
 	// "liquipedia" (HTML scrape via MediaWiki API) or "sheet" (CSV export
@@ -65,6 +67,8 @@ func Load() (*Config, error) {
 	loadDotEnvIfPresent()
 
 	cfg := &Config{
+		ActiveEvent:         getEnv("ACTIVE_EVENT", "worlds-2026"),
+		WorldsSpreadsheetID: getEnv("WORLDS_SPREADSHEET_ID", "1BuyYGV59e_fR8fUkdgIRiFheBUaokulpj7pRtE39f-c"),
 		Port:                getEnv("PORT", "8080"),
 		DatabasePath:        getEnv("DATABASE_PATH", "./data/rlcs.db"),
 		LiquipediaPage:      getEnv("LIQUIPEDIA_PAGE", "Rocket_League_Championship_Series/2026/Paris_Major"),
@@ -108,6 +112,15 @@ func Load() (*Config, error) {
 			cfg.MatchSource, MatchSourceLiquipedia, MatchSourceSheet)
 	}
 
+	if cfg.ActiveEvent != "worlds-2026" && cfg.ActiveEvent != "paris-major-2026" {
+		return nil, fmt.Errorf("unknown ACTIVE_EVENT %q", cfg.ActiveEvent)
+	}
+	if cfg.ActiveEvent == "worlds-2026" {
+		cfg.MatchSource = MatchSourceSheet
+	}
+	if cfg.SheetPollInterval <= 0 || cfg.LiquipediaPollInterval <= 0 {
+		return nil, fmt.Errorf("poll intervals must be positive")
+	}
 	return cfg, nil
 }
 

@@ -26,21 +26,27 @@ switch ($Target) {
         Push-Location web
         try {
             pnpm install --frozen-lockfile
+            if ($LASTEXITCODE -ne 0) { throw "Frontend dependency install failed" }
             pnpm run build
+            if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
         }
         finally { Pop-Location }
     }
     "backend" {
         go build -o bin/server.exe ./cmd/server
+        if ($LASTEXITCODE -ne 0) { throw "Backend build failed" }
     }
     "build" {
         Push-Location web
         try {
             pnpm install --frozen-lockfile
+            if ($LASTEXITCODE -ne 0) { throw "Frontend dependency install failed" }
             pnpm run build
+            if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
         }
         finally { Pop-Location }
         go build -o bin/server.exe ./cmd/server
+        if ($LASTEXITCODE -ne 0) { throw "Backend build failed" }
     }
     "clean" {
         if (Test-Path web/dist) { Remove-Item -Recurse -Force web/dist }

@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ApiClientError } from '../api/client';
-import { groupMatchesByRound } from '../lib/matches';
+import { useEvent } from '../lib/events';
 import { useAuth, isLockExempt } from '../lib/auth';
-import { RoundSection } from '../components/RoundSection';
+import { DayMatches } from '../components/DayMatches';
 import { SkeletonSection } from '../components/Skeleton';
 import { TeamChip } from '../components/TeamChip';
 import type { ParticipantWithPredictions, Pick } from '../types/api';
@@ -18,6 +18,7 @@ type PredictionVars =
   | { matchId: string; action: 'clear' };
 
 export function ProfilePage() {
+  const { event } = useEvent();
   const { id } = useParams<{ id: string }>();
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -25,7 +26,7 @@ export function ProfilePage() {
   // Editable only when you're logged in as the profile you're viewing. Viewing
   // anyone else (or being anonymous) is read-only — and the server only returns
   // their completed-match predictions anyway.
-  const canEdit = auth !== null && auth === id;
+  const canEdit = event.is_active && auth !== null && auth === id;
 
   // The Coin and Chat are lock-exempt accounts: when the operator is logged in
   // as one of them, its match cards stay tappable even after the day locks, so
@@ -40,13 +41,13 @@ export function ProfilePage() {
   // completed-match picks — so two different viewers must not share one cache
   // entry, or a stale full-pick entry would leak in-progress picks across
   // identities for the 30s staleTime window.
-  const participantKey = ['participant', id, auth] as const;
+  const participantKey = ['participant', event.id, id, auth] as const;
 
   // Matches poll every 30s so new rounds and completed results appear without
   // a manual refresh (spec § 7.2).
   const matchesQuery = useQuery({
-    queryKey: ['matches'],
-    queryFn: api.getMatches,
+    queryKey: ['matches', event.id],
+    queryFn: () => api.getMatches(event.id),
     refetchInterval: 30_000,
   });
 
@@ -54,7 +55,7 @@ export function ProfilePage() {
   // when a match completes (the score is computed server-side on read).
   const participantQuery = useQuery({
     queryKey: participantKey,
-    queryFn: () => api.getParticipant(id!),
+    queryFn: () => api.getParticipant(id!, event.id),
     enabled: Boolean(id),
     refetchInterval: 30_000,
   });
@@ -63,9 +64,9 @@ export function ProfilePage() {
   const mutation = useMutation({
     mutationFn: async (vars: PredictionVars) => {
       if (vars.action === 'set') {
-        return api.setPrediction(id!, vars.matchId, vars.pick);
+        return api.setPrediction(id!, vars.matchId, vars.pick, event.id);
       }
-      await api.deletePrediction(id!, vars.matchId);
+      await api.deletePrediction(id!, vars.matchId, event.id);
       return null;
     },
     onMutate: async (vars) => {
@@ -94,7 +95,7 @@ export function ProfilePage() {
   // ----- winner pick mutation (own profile only) -----
   const [winnerSelection, setWinnerSelection] = useState('');
   const winnerMutation = useMutation({
-    mutationFn: (teamName: string) => api.setWinnerPick(id!, teamName),
+    mutationFn: (teamName: string) => api.setWinnerPick(id!, teamName, event.id),
     onSuccess: (updated) => {
       queryClient.setQueryData(participantKey, updated);
       // The leaderboard shows winner picks, so refresh that list too.
@@ -103,22 +104,12 @@ export function ProfilePage() {
     },
   });
 
-  const grouped = useMemo(
-    () => (matchesQuery.data ? groupMatchesByRound(matchesQuery.data) : []),
-    [matchesQuery.data],
-  );
-
-  // Distinct competing teams, alphabetical — populates the winner-pick dropdown.
-  // Derived from matches; no dedicated teams endpoint needed.
-  const teams = useMemo(() => {
-    if (!matchesQuery.data) return [];
-    const set = new Set<string>();
-    for (const m of matchesQuery.data) {
-      set.add(m.team_a);
-      set.add(m.team_b);
-    }
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [matchesQuery.data]);
+  const teamsQuery = useQuery({
+    queryKey: ['teams', event.id],
+    queryFn: () => api.getTeams(event.id),
+    refetchInterval: event.is_active ? 30_000 : false,
+  });
+  const teams = teamsQuery.data ?? [];
 
   const pickForMatch = (matchId: string): Pick | null => {
     const pred = participantQuery.data?.predictions.find((p) => p.match_id === matchId);
@@ -160,6 +151,7 @@ export function ProfilePage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-6">
       <header>
+        <p className="mb-1 text-sm text-zinc-400">{event.name}</p>
         <h1 className="text-2xl font-semibold tracking-tight">
           {participantQuery.data?.display_name ?? 'Loading\u2026'}
         </h1>
@@ -175,7 +167,7 @@ export function ProfilePage() {
         <section className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-              Tournament Winner Pick
+              3v3 Tournament Winner Pick
             </h2>
             {currentWinnerPick && (
               <span className="flex items-center gap-2 text-sm text-zinc-300">
@@ -250,20 +242,17 @@ export function ProfilePage() {
         </p>
       )}
 
-      {matchesQuery.data && grouped.length === 0 && (
+      {matchesQuery.data && matchesQuery.data.length === 0 && (
         <p className="text-sm text-zinc-500">No matches yet.</p>
       )}
 
-      {grouped.map((group) => (
-        <RoundSection
-          key={group.round.name}
-          group={group}
+        <DayMatches
+          matches={matchesQuery.data ?? []}
           pickForMatch={pickForMatch}
           onPick={handlePick}
           readOnly={!canEdit}
           bypassLock={bypassLock}
         />
-      ))}
     </main>
   );
 }

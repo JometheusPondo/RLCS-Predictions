@@ -8,7 +8,15 @@ export type Pick = 'A' | 'B';
 export type MatchStatus = 'upcoming' | 'live' | 'completed';
 
 // Group stage is a single round robin (4 groups of 4), not Swiss.
-export type Stage = 'group' | 'bracket';
+export type Stage = 'group' | 'bracket' | 'play_in' | '1v1' | '2v2';
+
+export interface Tournament {
+  id: number;
+  name: string;
+  is_active: boolean;
+  timezone: string;
+  last_synced_at?: string;
+}
 
 export interface Participant {
   id: string;
@@ -51,6 +59,11 @@ export interface Round {
 }
 
 export interface Match {
+  best_of: number;
+  event_date: string | null;
+  placeholder_a: string | null;
+  placeholder_b: string | null;
+  slot: string | null;
   id: string;
   round: Round;
   team_a: string;

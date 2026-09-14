@@ -53,7 +53,7 @@ var (
 // Scores are computed in Go (see internal/scoring) rather than in SQL: the
 // rules — a 4-way branch plus an underdog cross-participant pick count — don't
 // fit a readable inline query.
-func (db *DB) ListParticipants(ctx context.Context) ([]models.Participant, error) {
+func (db *EventStore) ListParticipants(ctx context.Context) ([]models.Participant, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, display_name FROM participants`)
 	if err != nil {
 		return nil, err
@@ -108,12 +108,13 @@ func (db *DB) ListParticipants(ctx context.Context) ([]models.Participant, error
 
 // allWinnerPicks returns every participant's winner-pick history, keyed by
 // participant id, each slice ordered oldest-first.
-func (db *DB) allWinnerPicks(ctx context.Context) (map[string][]models.WinnerPick, error) {
+func (db *EventStore) allWinnerPicks(ctx context.Context) (map[string][]models.WinnerPick, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT participant_id, team_name, picked_at
 		FROM winner_pick_history
-		ORDER BY participant_id, picked_at ASC
-	`)
+		WHERE tournament_id = ?
+		ORDER BY participant_id, picked_at ASC, id ASC
+	`, db.tournamentID)
 	if err != nil {
 		return nil, err
 	}
@@ -134,13 +135,13 @@ func (db *DB) allWinnerPicks(ctx context.Context) (map[string][]models.WinnerPic
 }
 
 // winnerPicksFor returns a single participant's winner-pick history, oldest first.
-func (db *DB) winnerPicksFor(ctx context.Context, participantID string) ([]models.WinnerPick, error) {
+func (db *EventStore) winnerPicksFor(ctx context.Context, participantID string) ([]models.WinnerPick, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT team_name, picked_at
 		FROM winner_pick_history
-		WHERE participant_id = ?
-		ORDER BY picked_at ASC
-	`, participantID)
+		WHERE participant_id = ? AND tournament_id = ?
+		ORDER BY picked_at ASC, id ASC
+	`, participantID, db.tournamentID)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +225,7 @@ func (db *DB) CreateParticipant(ctx context.Context, id, displayName string) (*m
 // in-progress picks from other users) is the handler's job, since only the
 // handler knows who is asking. blast_admin can be fetched here by id even
 // though it's excluded from ListParticipants.
-func (db *DB) GetParticipantWithPredictions(ctx context.Context, id string) (*models.ParticipantWithPredictions, error) {
+func (db *EventStore) GetParticipantWithPredictions(ctx context.Context, id string) (*models.ParticipantWithPredictions, error) {
 	var pwp models.ParticipantWithPredictions
 	err := db.QueryRowContext(ctx,
 		`SELECT id, display_name FROM participants WHERE id = ?`, id,
@@ -237,8 +238,9 @@ func (db *DB) GetParticipantWithPredictions(ctx context.Context, id string) (*mo
 	}
 
 	rows, err := db.QueryContext(ctx,
-		`SELECT match_id, pick FROM predictions WHERE participant_id = ? ORDER BY match_id`,
-		id,
+		`SELECT p.match_id, p.pick FROM predictions p JOIN matches m ON m.id = p.match_id
+		JOIN rounds r ON r.id = m.round_id WHERE p.participant_id = ? AND r.tournament_id = ? ORDER BY p.match_id`,
+		id, db.tournamentID,
 	)
 	if err != nil {
 		return nil, err
@@ -284,7 +286,7 @@ func (db *DB) GetParticipantWithPredictions(ctx context.Context, id string) (*mo
 // applying the scoring rules in internal/scoring. The underdog rule needs the
 // full cross-participant pick distribution, so even a single participant's
 // stats are derived from the global data set.
-func (db *DB) computeAllStats(ctx context.Context) (map[string]scoring.ParticipantStats, error) {
+func (db *EventStore) computeAllStats(ctx context.Context) (map[string]scoring.ParticipantStats, error) {
 	matches, err := db.ListMatches(ctx)
 	if err != nil {
 		return nil, err
@@ -304,10 +306,11 @@ func (db *DB) computeAllStats(ctx context.Context) (map[string]scoring.Participa
 // Rows for nonStandardParticipants ("The Coin", "Chat") are kept — they are
 // scored normally — but flagged with Benchmark = true so the scoring layer
 // leaves them out of the underdog tally.
-func (db *DB) scoringPredictions(ctx context.Context) ([]scoring.PredictionRow, error) {
+func (db *EventStore) scoringPredictions(ctx context.Context) ([]scoring.PredictionRow, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT participant_id, match_id, pick FROM predictions WHERE participant_id != ?`,
-		models.AdminID,
+		`SELECT p.participant_id, p.match_id, p.pick FROM predictions p JOIN matches m ON m.id = p.match_id
+		JOIN rounds r ON r.id = m.round_id WHERE p.participant_id != ? AND r.tournament_id = ?`,
+		models.AdminID, db.tournamentID,
 	)
 	if err != nil {
 		return nil, err
@@ -338,7 +341,7 @@ func (db *DB) scoringPredictions(ctx context.Context) ([]scoring.PredictionRow, 
 // It reuses the same inputs as scoring — every match, every non-admin
 // prediction, the participant list — so the projection and the live
 // leaderboard are always derived from one consistent snapshot.
-func (db *DB) SimulateProjection(ctx context.Context) (day string, results []simulation.Result, err error) {
+func (db *EventStore) SimulateProjection(ctx context.Context) (day string, results []simulation.Result, err error) {
 	matches, err := db.ListMatches(ctx)
 	if err != nil {
 		return "", nil, err
@@ -365,7 +368,7 @@ func (db *DB) SimulateProjection(ctx context.Context) (day string, results []sim
 const matchSelectColumns = `
 	m.id, m.team_a, m.team_b, m.team_a_score, m.team_b_score,
 	m.winner, m.status, m.scheduled_at,
-	m.placeholder_a, m.placeholder_b, m.slot,
+	m.placeholder_a, m.placeholder_b, m.slot, m.best_of, m.event_date,
 	r.id, r.stage, r.sort_order, r.name
 `
 
@@ -381,7 +384,7 @@ func scanMatch(s rowScanner, m *models.Match) error {
 	return s.Scan(
 		&m.ID, &m.TeamA, &m.TeamB, &m.TeamAScore, &m.TeamBScore,
 		&m.Winner, &m.Status, &m.ScheduledAt,
-		&m.PlaceholderA, &m.PlaceholderB, &m.Slot,
+		&m.PlaceholderA, &m.PlaceholderB, &m.Slot, &m.BestOf, &m.EventDate,
 		&m.Round.ID, &m.Round.Stage, &m.Round.SortOrder, &m.Round.Name,
 	)
 }
@@ -394,14 +397,15 @@ func scanMatch(s rowScanner, m *models.Match) error {
 // day's lock time and which date is the final, per-match day — is derived
 // from the match set itself, so ListMatches is the single source of truth for
 // Match.Locked.
-func (db *DB) ListMatches(ctx context.Context) ([]models.Match, error) {
+func (db *EventStore) ListMatches(ctx context.Context) ([]models.Match, error) {
 	q := `
 		SELECT ` + matchSelectColumns + `
 		FROM matches m
 		JOIN rounds r ON r.id = m.round_id
+		WHERE r.tournament_id = ?
 		ORDER BY r.sort_order ASC, m.id ASC
 	`
-	rows, err := db.QueryContext(ctx, q)
+	rows, err := db.QueryContext(ctx, q, db.tournamentID)
 	if err != nil {
 		return nil, err
 	}
@@ -460,12 +464,20 @@ func (db *DB) GetMatch(ctx context.Context, id string) (*models.Match, error) {
 // rewrites placeholder display text every sync, and once real teams resolve
 // it writes the team names into team_a / team_b and clears the placeholders.
 func (db *DB) UpsertMatch(ctx context.Context, m *models.Match, roundID int) error {
+	var active bool
+	if err := db.QueryRowContext(ctx, `SELECT t.is_active FROM rounds r JOIN tournaments t ON t.id = r.tournament_id WHERE r.id = ?`, roundID).Scan(&active); err != nil {
+		return err
+	}
+	if !active {
+		return ErrEventReadOnly
+	}
+
 	const q = `
 		INSERT INTO matches
 			(id, round_id, team_a, team_b, team_a_score, team_b_score,
 			 winner, status, scheduled_at, placeholder_a, placeholder_b, slot,
-			 updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+			 best_of, event_date, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
 		ON CONFLICT(id) DO UPDATE SET
 			team_a         = excluded.team_a,
 			team_b         = excluded.team_b,
@@ -477,12 +489,27 @@ func (db *DB) UpsertMatch(ctx context.Context, m *models.Match, roundID int) err
 			placeholder_a  = excluded.placeholder_a,
 			placeholder_b  = excluded.placeholder_b,
 			slot           = excluded.slot,
+			best_of        = excluded.best_of,
+			event_date     = excluded.event_date,
 			updated_at     = datetime('now')
 	`
+	bestOf := m.BestOf
+	if bestOf == 0 {
+		bestOf = 5
+		if m.Round.Stage == models.StageBracket {
+			bestOf = 7
+		}
+	}
+	eventDate := m.EventDate
+	if eventDate == nil && m.ScheduledAt != nil && len(*m.ScheduledAt) >= 10 {
+		date := (*m.ScheduledAt)[:10]
+		eventDate = &date
+	}
 	_, err := db.ExecContext(ctx, q,
 		m.ID, roundID, m.TeamA, m.TeamB, m.TeamAScore, m.TeamBScore,
 		m.Winner, m.Status, m.ScheduledAt,
 		m.PlaceholderA, m.PlaceholderB, m.Slot,
+		bestOf, eventDate,
 	)
 	return err
 }
@@ -590,7 +617,7 @@ var nonStandardParticipants = map[string]bool{
 // its predictions are not locked (see checkPredictionWriteable). Returns
 // ErrNotFound if either the participant or the match is missing, or
 // ErrPredictionsLocked if the match's predictions have locked.
-func (db *DB) SetPrediction(ctx context.Context, participantID, matchID, pick string) error {
+func (db *EventStore) SetPrediction(ctx context.Context, participantID, matchID, pick string) error {
 	if err := db.checkPredictionWriteable(ctx, participantID, matchID); err != nil {
 		return err
 	}
@@ -607,7 +634,7 @@ func (db *DB) SetPrediction(ctx context.Context, participantID, matchID, pick st
 
 // DeletePrediction removes a prediction. Same validation rules as SetPrediction.
 // Returns ErrNotFound if no prediction existed for that (participant, match) pair.
-func (db *DB) DeletePrediction(ctx context.Context, participantID, matchID string) error {
+func (db *EventStore) DeletePrediction(ctx context.Context, participantID, matchID string) error {
 	if err := db.checkPredictionWriteable(ctx, participantID, matchID); err != nil {
 		return err
 	}
@@ -639,7 +666,10 @@ func (db *DB) DeletePrediction(ctx context.Context, participantID, matchID strin
 // Participants in nonStandardParticipants skip the lock check entirely (see
 // that var's doc). The match- and participant-existence checks still apply to
 // them — only the lock is waived.
-func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, matchID string) error {
+func (db *EventStore) checkPredictionWriteable(ctx context.Context, participantID, matchID string) error {
+	if err := db.requireActive(ctx); err != nil {
+		return err
+	}
 	matches, err := db.ListMatches(ctx)
 	if err != nil {
 		return err
@@ -653,6 +683,9 @@ func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, match
 	}
 	if match == nil {
 		return ErrNotFound
+	}
+	if match.TeamA == "" || match.TeamB == "" || match.PlaceholderA != nil || match.PlaceholderB != nil {
+		return ErrTeamsUnresolved
 	}
 	if match.Locked && !nonStandardParticipants[participantID] {
 		return ErrPredictionsLocked
@@ -679,7 +712,10 @@ func (db *DB) checkPredictionWriteable(ctx context.Context, participantID, match
 // winnerPicksLocked). Participants in nonStandardParticipants (The Coin, Chat)
 // are exempt — mirroring the prediction lock — so the operator can still set
 // the benchmark accounts at any time.
-func (db *DB) AddWinnerPick(ctx context.Context, participantID, teamName string) error {
+func (db *EventStore) AddWinnerPick(ctx context.Context, participantID, teamName string) error {
+	if err := db.requireActive(ctx); err != nil {
+		return err
+	}
 	if !nonStandardParticipants[participantID] {
 		locked, err := db.winnerPicksLocked(ctx)
 		if err != nil {
@@ -691,8 +727,8 @@ func (db *DB) AddWinnerPick(ctx context.Context, participantID, teamName string)
 	}
 
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO winner_pick_history (participant_id, team_name) VALUES (?, ?)`,
-		participantID, teamName,
+		`INSERT INTO winner_pick_history (tournament_id, participant_id, team_name) VALUES (?, ?, ?)`,
+		db.tournamentID, participantID, teamName,
 	)
 	return err
 }
@@ -707,7 +743,7 @@ func (db *DB) AddWinnerPick(ctx context.Context, participantID, teamName string)
 // stays passed, a started match stays started), once this returns true it
 // never returns false again: the winner pick is frozen for the rest of the
 // event, with no extra "permanent" bookkeeping.
-func (db *DB) winnerPicksLocked(ctx context.Context) (bool, error) {
+func (db *EventStore) winnerPicksLocked(ctx context.Context) (bool, error) {
 	matches, err := db.ListMatches(ctx)
 	if err != nil {
 		return false, err
@@ -728,17 +764,17 @@ func (db *DB) winnerPicksLocked(ctx context.Context) (bool, error) {
 // SheetSource writes empty strings into team_a / team_b on those rows and
 // puts display text in placeholder_a / placeholder_b — neither belongs in
 // the winner-pick dropdown.
-func (db *DB) ListTeamNames(ctx context.Context) ([]string, error) {
+func (db *EventStore) ListTeamNames(ctx context.Context) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT team_name FROM (
-			SELECT team_a AS team_name FROM matches
-			WHERE team_a != '' AND placeholder_a IS NULL
+			SELECT team_a AS team_name FROM matches m JOIN rounds r ON r.id = m.round_id
+			WHERE team_a != '' AND placeholder_a IS NULL AND r.tournament_id = ? AND r.stage NOT IN ('1v1', '2v2')
 			UNION
-			SELECT team_b AS team_name FROM matches
-			WHERE team_b != '' AND placeholder_b IS NULL
+			SELECT team_b AS team_name FROM matches m JOIN rounds r ON r.id = m.round_id
+			WHERE team_b != '' AND placeholder_b IS NULL AND r.tournament_id = ? AND r.stage NOT IN ('1v1', '2v2')
 		)
 		ORDER BY team_name ASC
-	`)
+	`, db.tournamentID, db.tournamentID)
 	if err != nil {
 		return nil, err
 	}

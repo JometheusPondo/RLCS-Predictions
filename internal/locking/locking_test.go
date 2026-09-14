@@ -9,6 +9,30 @@ import (
 
 func sp(s string) *string { return &s }
 
+func TestWorldsPlayInLocksIndividuallyAndUsesVenueDay(t *testing.T) {
+	first := mkMatch("first", "2026-09-15T16:00:00Z", models.StatusUpcoming)
+	first.Round.Stage = models.StagePlayIn
+	first.EventDate = sp("2026-09-15")
+	later := first
+	later.ID, later.ScheduledAt = "later", sp("2026-09-15T20:00:00Z")
+	final := mkMatch("final", "2026-09-20T21:00:00Z", models.StatusUpcoming)
+	matches := []models.Match{first, later, final}
+	schedule := BuildSchedule(matches)
+	now := time.Date(2026, 9, 15, 17, 0, 0, 0, time.UTC)
+	if !schedule.IsLocked(first, now) || schedule.IsLocked(later, now) {
+		t.Fatal("play-ins were locked as a whole day")
+	}
+
+	night := mkMatch("night", "2026-09-17T01:00:00Z", models.StatusUpcoming)
+	night.EventDate = sp("2026-09-16")
+	dayStart := mkMatch("day-start", "2026-09-16T16:00:00Z", models.StatusUpcoming)
+	dayStart.EventDate = sp("2026-09-16")
+	schedule = BuildSchedule([]models.Match{night, dayStart, final})
+	if !schedule.IsLocked(night, time.Date(2026, 9, 16, 16, 0, 0, 0, time.UTC)) {
+		t.Fatal("late match was assigned to the next UTC day")
+	}
+}
+
 // mkMatch builds a match with a given scheduled timestamp and status.
 // scheduledAt "" means no scheduled time at all.
 func mkMatch(id, scheduledAt, status string) models.Match {

@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api, ApiClientError } from '../api/client';
 import { setToken } from '../lib/auth';
+import { useEvent } from '../lib/events';
 
 // Landing page (spec § 7.1 + the auth change): a dropdown of existing profiles;
 // selecting one reveals a password box below it. Logging in sets the auth
@@ -13,6 +14,7 @@ import { setToken } from '../lib/auth';
 // provisioned by the operator directly. When an approval flow is built later,
 // re-add the create UI here and re-enable POST /api/participants in the router.
 export function LandingPage() {
+  const { event, eventSearch } = useEvent();
   const navigate = useNavigate();
 
   const {
@@ -20,8 +22,8 @@ export function LandingPage() {
     isPending,
     error,
   } = useQuery({
-    queryKey: ['participants'],
-    queryFn: api.getParticipants,
+    queryKey: ['participants', event.id],
+    queryFn: () => api.getParticipants(event.id),
   });
 
   // Selected profile from the dropdown — once non-empty, the password box shows.
@@ -32,7 +34,7 @@ export function LandingPage() {
     mutationFn: ({ id, pw }: { id: string; pw: string }) => api.login(id, pw),
     onSuccess: (resp) => {
       setToken(resp.token);
-      navigate(`/profile/${resp.token}`);
+      navigate(`/profile/${resp.token}${eventSearch}`);
     },
   });
 
@@ -47,7 +49,7 @@ export function LandingPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Who are you?</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Pick your profile to start predicting.
+          {event.is_active ? 'Pick your profile to start predicting.' : 'Select a profile to view its archived predictions.'}
         </p>
       </div>
 
@@ -69,6 +71,7 @@ export function LandingPage() {
             value={selectedId}
             onChange={(e) => {
               setSelectedId(e.target.value);
+              if (!event.is_active) navigate(`/profile/${e.target.value}${eventSearch}`);
               setPassword('');
               loginMutation.reset();
             }}
@@ -85,7 +88,7 @@ export function LandingPage() {
           </select>
 
           {/* Password box — appears once a profile is chosen. */}
-          {selectedId !== '' && (
+          {event.is_active && selectedId !== '' && (
             <div className="space-y-2">
               <input
                 type="password"

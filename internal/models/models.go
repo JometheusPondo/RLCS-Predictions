@@ -22,15 +22,18 @@ const (
 const (
 	StageGroup   = "group"
 	StageBracket = "bracket"
+	StagePlayIn  = "play_in"
+	Stage1v1     = "1v1"
+	Stage2v2     = "2v2"
 )
 
 // Sort-order anchors per spec § 5.4. Group-stage rounds get 100 * round_number;
 // bracket rounds occupy the 1000+ range so they always sort after the group stage.
 const (
-	SortOrderGroupStep   = 100
-	SortOrderQuarters    = 1000
-	SortOrderSemifinals  = 1100
-	SortOrderFinal       = 1200
+	SortOrderGroupStep  = 100
+	SortOrderQuarters   = 1000
+	SortOrderSemifinals = 1100
+	SortOrderFinal      = 1200
 )
 
 // Participant is the shape returned by GET /api/participants and the embedded
@@ -75,8 +78,9 @@ type ParticipantWithPredictions struct {
 // pick-count tally.
 const AdminID = "blast_admin"
 
-// Tournament is internal-facing; not currently returned by any API endpoint.
+// Tournament describes an event returned by GET /api/events.
 type Tournament struct {
+	Timezone       string  `json:"timezone"`
 	ID             int     `json:"id"`
 	LiquipediaPage string  `json:"liquipedia_page"`
 	Name           string  `json:"name"`
@@ -126,6 +130,8 @@ type UnderdogInfo struct {
 // underdog. Set only by ListMatchesWithUnderdog and only on LOCKED matches,
 // so the crowd's lean isn't revealed while picks can still change.
 type Match struct {
+	BestOf       int           `json:"best_of"`
+	EventDate    *string       `json:"event_date"`
 	ID           string        `json:"id"`
 	Round        Round         `json:"round"`
 	TeamA        string        `json:"team_a"`

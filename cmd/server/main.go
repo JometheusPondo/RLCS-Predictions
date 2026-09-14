@@ -57,12 +57,25 @@ func main() {
 	}
 	defer func() { _ = database.Close() }()
 
+	backup, err := database.BackupBeforeEventMigration(ctx, cfg.DatabasePath)
+	if err != nil {
+		logger.Error("pre-migration backup failed", "err", err)
+		os.Exit(1)
+	}
+	if backup != "" {
+		logger.Info("pre-migration backup saved", "path", backup)
+	}
+
 	if err := database.Migrate(ctx, logger); err != nil {
 		logger.Error("db migration failed", "err", err)
 		os.Exit(1)
 	}
 
-	tournament, err := database.GetOrCreateActiveTournament(ctx, cfg.LiquipediaPage, deriveTournamentName(cfg.LiquipediaPage))
+	page, name, timezone := cfg.LiquipediaPage, "Paris Major 2026", "Europe/Paris"
+	if cfg.ActiveEvent == "worlds-2026" {
+		page, name, timezone = "Rocket_League_Championship_Series/2026", "World Championship 2026", "America/Chicago"
+	}
+	tournament, err := database.ActivateTournament(ctx, page, name, timezone)
 	if err != nil {
 		logger.Error("seed tournament failed", "err", err)
 		os.Exit(1)
@@ -147,6 +160,9 @@ func main() {
 // if the source-specific configuration is invalid (e.g., placeholder
 // Liquipedia user-agent in production, missing Google Sheets IDs).
 func buildMatchSource(cfg *config.Config, tournament *models.Tournament, logger *slog.Logger) (matchsource.MatchSource, error) {
+	if cfg.ActiveEvent == "worlds-2026" {
+		return matchsource.NewWorldsSource(tournament.ID, cfg.WorldsSpreadsheetID, logger.With("component", "worlds-source"))
+	}
 	switch cfg.MatchSource {
 	case config.MatchSourceLiquipedia:
 		if cfg.HasPlaceholderUserAgent() {
@@ -190,7 +206,8 @@ func ensureDBDir(path string) error {
 
 // deriveTournamentName turns a Liquipedia page slug into a readable name.
 // "Rocket_League_Championship_Series/2026/Paris_Major"
-//   → "Rocket League Championship Series 2026 Paris Major"
+//
+//	→ "Rocket League Championship Series 2026 Paris Major"
 func deriveTournamentName(page string) string {
 	n := strings.ReplaceAll(page, "/", " ")
 	return strings.ReplaceAll(n, "_", " ")

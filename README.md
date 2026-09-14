@@ -1,150 +1,158 @@
-# RLCS Prediction Site
+# RLCS Predictions
 
-A small web app for tracking RLCS broadcast talent match predictions during
-in-person Major events. Replaces the spreadsheet workflow: pick a profile,
-predict match winners, watch the leaderboard.
+A Go/SQLite server and React/TypeScript frontend for broadcast talent predictions.
+World Championship 2026 is the active event. Existing Major data remains in the
+same database and is available through the read-only Event selector.
 
-**Spec:** see `rlcs-predictions-prompt.md` for the full design document.
+## Worlds 2026
 
-## How it works
+The site imports the public [Worlds broadcast sheet](https://docs.google.com/spreadsheets/d/1BuyYGV59e_fR8fUkdgIRiFheBUaokulpj7pRtE39f-c/edit):
 
-The server polls a Liquipedia tournament page every 5 minutes, parses the
-group-stage matchlists and the playoff bracket, and stores matches in SQLite.
-Broadcast talent open the site, pick (or create) a profile, and tap a side of
-each match card to predict the winner. Once a match completes on Liquipedia,
-that prediction locks and scores the participant if correct. No login — it's
-an honor-system tool for a small known group.
+| Tab | GID | Scheduled matches |
+| --- | --- | ---: |
+| GSL Play-In Output | 1174796019 | 10 |
+| Groups Output | 10266191 | 24 |
+| Bracket Output | 1847119516 | 13 |
+| 2v2 + 1v1 Output | 381597648 | 6 |
+| Overall Schedule | 1663218581 | Start times |
 
-One Go binary serves both the JSON API (`/api/*`) and the embedded React
-frontend (everything else). No runtime file dependencies except the SQLite
-database.
+All 53 matches count toward one Worlds leaderboard. Play-ins and groups are
+best of five; playoffs, 1v1, and 2v2 are best of seven. The champion selector
+remains a 3v3 tournament-winner pick; it does not award points.
 
-## Stack
+Matches are grouped by venue calendar day, Tuesday September 15 through Sunday
+September 20, then by round. Times use `America/Chicago`, including daylight
+saving time, independently of the viewer's timezone. The dates agree with the
+[official Worlds primer](https://www.rocketleague.com/news/2026-rocket-league-world-championship-primer).
 
-- **Backend:** Go 1.22+, [chi](https://github.com/go-chi/chi),
-  [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) (pure-Go, no CGO),
-  [goquery](https://github.com/PuerkitoBio/goquery), `log/slog`.
-- **Frontend:** React 19, TypeScript 6, Vite 8, Tailwind v4, TanStack Query,
-  React Router 7.
-- **Package manager:** pnpm 9+. Do not use npm — see § 2.1 of the spec for the
-  supply-chain hygiene rules.
+The schedule tab contains two side-by-side blocks. The importer uses the
+rightmost published `Scheduled Start (CT)` block and accepts times with or
+without seconds. A blank start time remains “Time to be confirmed.” Sheet
+placeholders remain visible but cannot receive predictions until both teams
+resolve. Team identity does not depend on the sheet's old 1–16 numeric range.
 
-## Project layout
+The play-in sheet also contains unscheduled template finals AG and AM. They
+are not in the broadcast schedule and are not imported as playable matches.
+The scheduled GSL field has ten matches. Source snapshots from September 14,
+2026 are retained in `internal/matchsource/testdata/worlds_*.csv` for tests.
 
-```
-cmd/server/         main — config, DB, poller, HTTP server wiring
-internal/
-  api/              router, handlers, middleware, SPA file server
-  config/           env + .env loading
-  db/               SQLite open/migrate + all queries
-  liquipedia/       rate-limited client, HTML parser, background poller
-  models/           shared structs
-embed.go            //go:embed all:web/dist  (root package `app`)
-web/                React frontend (Vite project)
-  dist/             build output, embedded into the binary (.gitkeep placeholder in git)
-Dockerfile          3-stage build → distroless image
-Makefile / make.ps1 build targets (Unix / Windows)
-```
+## Scoring and locking
 
-## Development
+| Completed-match prediction | Points |
+| --- | ---: |
+| Correct side picked by at most four humans | 4 |
+| Other correct pick | 2 |
+| Incorrect pick in a series that went the full distance | 1 |
+| Other incorrect pick, or no pick | 0 |
 
-Two processes. The Vite dev server proxies `/api/*` to the Go server, so the
-browser only ever talks to `localhost:5173`.
+`the-coin` and `chat` are scored but excluded from the human underdog tally.
+Both retain their match-lock exemptions in the active event. Their upcoming
+and live cards remain editable after normal locks; the API also permits
+post-result corrections. Completed cards remain read-only in the UI.
+`blast_admin` is excluded from scoring and the leaderboard.
 
-```bash
-# Terminal 1 — backend (port 8080)
-go run ./cmd/server
+Play-ins lock individually at their published start or once marked live, so
+later rounds can be picked after opponents resolve. Other non-final days lock
+at the earliest published match start for that day. Championship Sunday locks
+match by match when play is reported. Champion picks lock when any match locks;
+Coin and Chat retain their existing exemption. Before completion, other people's
+picks are hidden from ordinary viewers; their own picks and admin views remain
+available. Archived events expose saved picks for read-only viewing.
 
-# Terminal 2 — frontend dev server (port 5173)
-cd web && pnpm install && pnpm dev
-```
+Scores, correct-pick counts, team choices, projections, champion picks, and
+prediction lists are scoped to the selected event. URLs preserve the selection
+with `?event=<id>`, and frontend caches include both event and viewer identities.
+Unknown event IDs fail explicitly. Archive writes are rejected on the server,
+even for admin, Coin, and Chat. Active-event writes cannot target archived matches.
 
-Open `http://localhost:5173`.
+## Local development and running
 
-On Windows without Git Bash, use `./make.ps1 dev` — it prints the two commands
-to run.
+Requirements: Go 1.22+, Node compatible with Vite 8, and pnpm. Use pnpm, not npm.
 
-### Dev sync endpoint
+On Windows, from the repository root:
 
-Set `DEV_MODE=true` to register `POST /api/sync/now`, which triggers a
-Liquipedia sync immediately instead of waiting for the 5-minute tick. Off in
-production.
-
-## Production build
-
-`make build` (or `./make.ps1 build` on Windows) runs two steps:
-
-1. `pnpm install --frozen-lockfile && pnpm run build` → `web/dist/`
-2. `go build -o bin/server ./cmd/server` → single binary with `web/dist/`
-   embedded
-
-The resulting `bin/server` is self-contained. It needs only a writable path
-for the SQLite database (`DATABASE_PATH`); everything else has a default.
-
-```bash
-make build
-DATABASE_PATH=./data/rlcs.db ./bin/server
+```powershell
+powershell -ExecutionPolicy Bypass -File ./run.ps1
 ```
 
-### Docker
+The launcher builds frontend and backend before starting Worlds at
+`http://localhost:8080`. It uses `data/rlcs.db`, overriding a Linux database path
+in an existing `.env`. Optional arguments: `-Port 8081 -DatabasePath tmp/test.db`.
+Keep the terminal open while using the app.
 
-Three-stage build (Node → Go → distroless), final image under 30 MB:
+For hot reload, run `go run ./cmd/server` and `pnpm --dir web dev` in separate
+terminals with a valid local `DATABASE_PATH`. Vite proxies API calls to port 8080.
 
-```bash
-docker build -t rlcs-predictions .
-docker run -p 8080:8080 \
-  -v "$(pwd)/data:/data" \
-  -e LIQUIPEDIA_USER_AGENT="RLCSPredictions/1.0 (https://github.com/you/rlcs-predictions; contact: you@example.com)" \
-  rlcs-predictions
+Validation:
+
+```powershell
+go test ./...
+pnpm --dir web build
+pnpm --dir web lint
 ```
 
-The `-v` mount is required — `DATABASE_PATH` defaults to `/data/rlcs.db` inside
-the container, and distroless has no writable filesystem otherwise.
+Tests cover migration preservation, consistent backups, event isolation,
+archived API write rejection, Coin/Chat exemptions, venue-day locking, source
+validation, stable match IDs across team resolution, and all match formats.
 
-## Environment variables
+## Upgrading the deployed Major site
 
-All optional except where noted; `.env` in the working directory is loaded
-automatically (real environment variables take precedence). See `.env.example`.
+Use the existing production SQLite database and persistent volume. GitHub and
+the local development database do not contain the completed Major predictions.
+Do not replace the production database with the local file or initialize a
+new empty volume if you want the actual historical results.
 
-| Variable | Default | Notes |
-|---|---|---|
-| `PORT` | `8080` | HTTP listen port |
-| `DATABASE_PATH` | `./data/rlcs.db` | SQLite file; parent dir is created if missing. **Must be writable.** |
-| `LIQUIPEDIA_PAGE` | `Rocket_League_Championship_Series/2026/Paris_Major` | Page slug to scrape |
-| `LIQUIPEDIA_POLL_INTERVAL` | `5m` | Go duration string |
-| `LIQUIPEDIA_USER_AGENT` | placeholder | **Set a real contact before production.** Liquipedia bans on missing/bogus contact info. |
-| `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
-| `DEV_MODE` | `false` | `true` registers `POST /api/sync/now` |
+On the first upgraded startup, the server creates a consistent SQLite backup
+beside the existing database: `<database>.pre-worlds-<timestamp>.bak`. Startup
+stops if this backup fails. Migration 005 runs in a transaction and preserves
+accounts, passwords, all matches, all predictions, and champion-pick timestamps.
+It associates existing champion history with the existing tournament. If old
+champion history exists alongside multiple tournaments, migration fails rather
+than guessing which tournament owns it; inspect and assign that data explicitly.
 
-## Deploy notes
+The server then creates or reuses Worlds and marks previous tournaments inactive.
+Restarting does not reset Worlds or create duplicate events. Only the active event
+is polled. The Major is never repolled by the Worlds process.
 
-- **User-Agent is mandatory.** Liquipedia's API enforces it and bans on
-  violations. The server logs a warning at startup if the placeholder contact
-  is still in place.
-- **Rate limiting** is enforced inside the Liquipedia client (2-second minimum
-  gap between requests), not by the poller — anything that goes through the
-  client respects the gate.
-- **SQLite WAL mode** is set on every connection. Back up the `.db`, `.db-wal`,
-  and `.db-shm` files together, or checkpoint first.
-- **Single tournament at a time.** The schema supports multiple tournaments for
-  future expansion, but the UI assumes one active tournament (the one in
-  `LIQUIPEDIA_PAGE`).
-- The container runs as distroless/static — no shell. To inspect the database
-  in production, copy the volume out and open it locally.
+For Docker, keep the existing `/var/lib/rlcs-predictions/data:/data` mount and
+`DATABASE_PATH=/data/rlcs.db`. Stop the old application before replacing it, then
+rebuild the service with `docker compose up -d --build`. Verify both events,
+the Major's saved totals, and a successful Worlds sync before broadcast use.
+Backups contain the same account data as the database and should stay private.
+
+## Configuration
+
+`.env` is loaded at startup; process environment variables take precedence.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ACTIVE_EVENT` | `worlds-2026` | Active event preset |
+| `WORLDS_SPREADSHEET_ID` | Linked Worlds sheet ID | Worlds data source |
+| `SHEET_POLL_INTERVAL` | `2m` | Worlds refresh interval |
+| `DATABASE_PATH` | `./data/rlcs.db` | Persistent SQLite database |
+| `PORT` | `8080` | HTTP port |
+| `LOG_LEVEL` | `info` | Logging level |
+| `DEV_MODE` | `false` | Enables manual sync endpoint |
+
+Worlds always uses its five-tab sheet preset. Old `SHEET_*_GID`,
+`SHEET_SPREADSHEET_ID`, and `LIQUIPEDIA_PAGE` settings cannot accidentally import
+the Major into Worlds. `ACTIVE_EVENT=paris-major-2026` retains the legacy importer
+for deliberate operator use; it reactivates Paris, so do not use it to browse
+history. Use the frontend Event selector instead.
 
 ## API
 
-| Method | Path | Notes |
-|---|---|---|
-| `GET` | `/api/health` | `{"ok":true}` |
-| `GET` | `/api/matches` | all matches with embedded round info |
-| `GET` | `/api/participants` | all participants, score computed on read |
-| `POST` | `/api/participants` | body `{display_name}` → 201; id is a slug of the name, 409 on collision |
-| `GET` | `/api/participants/:id` | participant + their predictions |
-| `PUT` | `/api/participants/:id/predictions/:match_id` | body `{pick}` (`"A"`/`"B"`) → 200; 400 if match completed |
-| `DELETE` | `/api/participants/:id/predictions/:match_id` | 204; 400 if match completed |
-| `GET` | `/api/sync/status` | `last_synced_at` + `last_error` |
-| `POST` | `/api/sync/now` | dev-only (`DEV_MODE=true`); triggers a sync |
+Read `/api/events` to discover IDs and active/archive status. Event-scoped
+endpoints accept `?event=<id>` and default to the configured live event.
 
-Errors return `{"error": "...", "code": "snake_case_tag"}` with the appropriate
-status.
+- `GET /api/matches`, `/api/teams`, `/api/participants`
+- `GET /api/participants/{id}`, `/api/simulation`, `/api/sync/status`
+- `POST /api/login` with `{participant_id, password}`
+- `PUT /api/participants/{id}/predictions/{match_id}` with `{pick: "A" | "B"}`
+- `DELETE /api/participants/{id}/predictions/{match_id}`
+- `PUT /api/participants/{id}/winner` with `{team_name}`
+- `GET /api/health`; dev-only `POST /api/sync/now`
+
+Self-registration remains disabled. The existing honor-system authentication
+has been retained: passwords are stored in SQLite, and the bearer token is a
+participant ID. It is not a hardened public authentication system.

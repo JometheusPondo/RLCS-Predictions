@@ -99,11 +99,11 @@ func TestComputeScores_SumsAcrossMatches(t *testing.T) {
 	// p2: correct non-underdog on m1 would need 5 others; keep it simple —
 	//     p2 wrong sweep on m1 (0) + correct underdog on m2 = 0 + 4 = 4.
 	m1 := completedMatch("m1", models.StageGroup, models.PickA, 3, 0)
-	m2 := completedMatch("m2", models.StageBracket, models.PickB, 2, 4)
+	m2 := completedMatch("m2", models.StageBracket, models.PickB, 3, 4)
 
 	preds := []PredictionRow{
 		{ParticipantID: "p1", MatchID: "m1", Pick: models.PickA}, // correct, 0 others → underdog → 4
-		{ParticipantID: "p1", MatchID: "m2", Pick: models.PickA}, // wrong, 2+4=6 games = distance → 1
+		{ParticipantID: "p1", MatchID: "m2", Pick: models.PickA}, // wrong, seven games → 1
 		{ParticipantID: "p2", MatchID: "m1", Pick: models.PickB}, // wrong, 3-0 sweep → 0
 		{ParticipantID: "p2", MatchID: "m2", Pick: models.PickB}, // correct, 0 others → underdog → 4
 	}
@@ -113,6 +113,21 @@ func TestComputeScores_SumsAcrossMatches(t *testing.T) {
 	}
 	if scores["p2"] != 4 {
 		t.Errorf("p2: got %d, want 4", scores["p2"])
+	}
+}
+
+func TestSideEventsUseExplicitSeriesLength(t *testing.T) {
+	for _, stage := range []string{models.Stage1v1, models.Stage2v2} {
+		match := completedMatch(stage, stage, models.PickB, 3, 4)
+		match.BestOf = 7
+		preds := []PredictionRow{{ParticipantID: "talent", MatchID: stage, Pick: models.PickA}}
+		if ComputeScores([]models.Match{match}, preds)["talent"] != 1 {
+			t.Fatalf("%s seven-game consolation missing", stage)
+		}
+		match.TeamAScore = ip(2)
+		if ComputeScores([]models.Match{match}, preds)["talent"] != 0 {
+			t.Fatalf("%s six-game series earned consolation", stage)
+		}
 	}
 }
 

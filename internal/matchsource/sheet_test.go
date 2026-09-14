@@ -228,8 +228,8 @@ func TestParseBracketCSV_SpecificPlaceholderText(t *testing.T) {
 		{"Bracket - Round 2", "Group B First", "Group C First"},
 		// R1 match C: Group B Second vs Group D Third, Day 3 4A.
 		{"Bracket - Round 1", "Group B Second", "Group D Third"},
-		// QF match I: Loser of A vs Winner of C.
-		{"Quarterfinals", "Loser of A", "Winner of C"},
+		// QF match I: Loser of A vs Winner of G.
+		{"Quarterfinals", "Loser of A", "Winner of G"},
 		// SF match K: Winner of B vs Winner of I.
 		{"Semifinals", "Winner of B", "Winner of I"},
 		// GF match M: Winner of K vs Winner of L.
@@ -341,7 +341,7 @@ func TestComputeSheetStatus(t *testing.T) {
 
 func TestParseSlotString(t *testing.T) {
 	cases := []struct {
-		in           string
+		in               string
 		wantDay, wantPos string
 	}{
 		{"Day 1 2A", "Day 1", "2A"},

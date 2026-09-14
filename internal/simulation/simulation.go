@@ -131,6 +131,9 @@ func incompleteMatchesOn(matches []models.Match, day string) []models.Match {
 // matchDate extracts the YYYY-MM-DD date prefix from a match's ScheduledAt
 // (RFC3339). Returns "" when the match has no scheduled time.
 func matchDate(m models.Match) string {
+	if m.EventDate != nil {
+		return *m.EventDate
+	}
 	if m.ScheduledAt == nil || len(*m.ScheduledAt) < dateLen {
 		return ""
 	}
