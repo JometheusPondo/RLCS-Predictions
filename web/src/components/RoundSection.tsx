@@ -1,4 +1,4 @@
-import type { Pick } from '../types/api';
+import type { Match, Pick } from '../types/api';
 import type { RoundGroup } from '../lib/matches';
 import { MatchCard } from './MatchCard';
 import { ReadOnlyMatchCard } from './ReadOnlyMatchCard';
@@ -18,6 +18,7 @@ interface RoundSectionProps {
   // tappable even after they lock. Used for the lock-exempt accounts (The Coin,
   // Chat). No effect when readOnly is true.
   bypassLock?: boolean;
+  onViewPicks?: (match: Match) => void;
 }
 
 // RoundSection renders one round-header section: the round name followed by its
@@ -29,6 +30,7 @@ export function RoundSection({
   onPick,
   readOnly = false,
   bypassLock = false,
+  onViewPicks,
 }: RoundSectionProps) {
   const { event } = useEvent();
   const timeFormat = new Intl.DateTimeFormat('en-US', {
@@ -46,7 +48,18 @@ export function RoundSection({
               <span>{match.scheduled_at && !match.scheduled_at.endsWith('T00:00:00Z') ? timeFormat.format(new Date(match.scheduled_at)) : 'Time to be confirmed'} · Best of {match.best_of}</span>
               <span>{match.status === 'completed' ? 'Final' : match.status === 'live' ? 'Live' : match.locked && !bypassLock ? 'Picks locked' : ''}</span>
             </p>
-          {readOnly ? (
+          {match.locked && onViewPicks && (!bypassLock || match.status === 'completed') ? (
+            <button
+              type="button"
+              onClick={() => onViewPicks(match)}
+              aria-label={`View predictions for ${match.team_a || match.placeholder_a || 'Team to be confirmed'} vs ${match.team_b || match.placeholder_b || 'Team to be confirmed'}`}
+              aria-haspopup="dialog"
+              className="block w-full rounded-lg text-left hover:brightness-110 focus-visible:outline-2 focus-visible:outline-blue-500"
+            >
+              <ReadOnlyMatchCard match={match} userPick={pickForMatch(match.id)} />
+              <span className="block px-1 pt-1 text-xs text-blue-400">View predictions →</span>
+            </button>
+          ) : readOnly ? (
             <ReadOnlyMatchCard
               key={match.id}
               match={match}
@@ -60,6 +73,11 @@ export function RoundSection({
               onPick={(side) => onPick(match.id, side)}
               bypassLock={bypassLock}
             />
+          )}
+          {match.locked && onViewPicks && bypassLock && match.status !== 'completed' && (
+            <button type="button" onClick={() => onViewPicks(match)} aria-haspopup="dialog" className="px-1 py-1 text-xs text-blue-400 underline underline-offset-2">
+              View predictions →
+            </button>
           )}
           </div>
         ))}

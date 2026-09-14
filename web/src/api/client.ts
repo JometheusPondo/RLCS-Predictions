@@ -15,6 +15,7 @@ import type {
   ApiErrorBody,
   LoginResponse,
   Tournament,
+  MatchPicker,
 } from '../types/api';
 import { getToken } from '../lib/auth';
 
@@ -79,6 +80,9 @@ export const api = {
   getTeams: (eventId: number): Promise<string[]> => request<string[]>('/teams', undefined, eventId),
 
   getMatches: (eventId: number): Promise<Match[]> => request<Match[]>('/matches', undefined, eventId),
+
+  getMatchPickers: (matchId: string, eventId: number): Promise<MatchPicker[]> =>
+    request<MatchPicker[]>(`/matches/${encodeURIComponent(matchId)}/picks`, undefined, eventId),
 
   getParticipants: (eventId: number): Promise<Participant[]> => request<Participant[]>('/participants', undefined, eventId),
 

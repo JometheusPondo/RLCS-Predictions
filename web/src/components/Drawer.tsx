@@ -41,6 +41,8 @@ export function Drawer({ open, onClose, title, children }: DrawerProps) {
 
       {/* Panel — slides in from the right. */}
       <aside
+        role="dialog"
+        aria-modal={open ? true : undefined}
         className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-zinc-800 bg-zinc-950 shadow-xl transition-transform duration-[250ms] ease-out ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}

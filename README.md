@@ -65,6 +65,12 @@ with `?event=<id>`, and frontend caches include both event and viewer identities
 Unknown event IDs fail explicitly. Archive writes are rejected on the server,
 even for admin, Coin, and Chat. Active-event writes cannot target archived matches.
 
+On My Picks, tap a locked match to open a sidebar listing each team's pickers.
+Coin and Chat retain their editable buttons and use a separate View predictions
+link. They appear in the lists but remain excluded from underdog counts; admin
+is omitted as a non-scoring account. The match-picks endpoint refuses unlocked
+matches and scopes every lookup to the selected event.
+
 ## Local development and running
 
 Requirements: Go 1.22+, Node compatible with Vite 8, and pnpm. Use pnpm, not npm.
@@ -146,6 +152,7 @@ Read `/api/events` to discover IDs and active/archive status. Event-scoped
 endpoints accept `?event=<id>` and default to the configured live event.
 
 - `GET /api/matches`, `/api/teams`, `/api/participants`
+- `GET /api/matches/{match_id}/picks` (after match lock)
 - `GET /api/participants/{id}`, `/api/simulation`, `/api/sync/status`
 - `POST /api/login` with `{participant_id, password}`
 - `POST /api/reset-password` with `{participant_id, new_password}`

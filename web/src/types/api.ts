@@ -92,6 +92,12 @@ export interface SyncStatus {
   last_error: string | null;
 }
 
+export interface MatchPicker {
+  id: string;
+  display_name: string;
+  pick: Pick;
+}
+
 // One participant's projected day swing, from GET /api/simulation. Both values
 // are >= 0: best_case = positions that could be GAINED if all of that player's
 // picks for the day hit, worst_case = positions that could be LOST if all

@@ -7,6 +7,7 @@ import { api, ApiClientError } from '../api/client';
 import { useEvent } from '../lib/events';
 import { useAuth, isLockExempt } from '../lib/auth';
 import { DayMatches } from '../components/DayMatches';
+import { MatchPicksDrawer } from '../components/MatchPicksDrawer';
 import { SkeletonSection } from '../components/Skeleton';
 import { TeamChip } from '../components/TeamChip';
 import type { ParticipantWithPredictions, Pick } from '../types/api';
@@ -18,6 +19,7 @@ type PredictionVars =
   | { matchId: string; action: 'clear' };
 
 export function ProfilePage() {
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const { event } = useEvent();
   const { id } = useParams<{ id: string }>();
   const auth = useAuth();
@@ -252,7 +254,12 @@ export function ProfilePage() {
           onPick={handlePick}
           readOnly={!canEdit}
           bypassLock={bypassLock}
+          onViewPicks={auth === id ? (match) => setSelectedMatchId(match.id) : undefined}
         />
+      <MatchPicksDrawer
+        match={matchesQuery.data?.find((match) => match.id === selectedMatchId) ?? null}
+        onClose={() => setSelectedMatchId(null)}
+      />
     </main>
   );
 }
