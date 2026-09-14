@@ -148,6 +148,7 @@ endpoints accept `?event=<id>` and default to the configured live event.
 - `GET /api/matches`, `/api/teams`, `/api/participants`
 - `GET /api/participants/{id}`, `/api/simulation`, `/api/sync/status`
 - `POST /api/login` with `{participant_id, password}`
+- `POST /api/reset-password` with `{participant_id, new_password}`
 - `PUT /api/participants/{id}/predictions/{match_id}` with `{pick: "A" | "B"}`
 - `DELETE /api/participants/{id}/predictions/{match_id}`
 - `PUT /api/participants/{id}/winner` with `{team_name}`
@@ -156,3 +157,11 @@ endpoints accept `?event=<id>` and default to the configured live event.
 Self-registration remains disabled. The existing honor-system authentication
 has been retained: passwords are stored in SQLite, and the bearer token is a
 participant ID. It is not a hardened public authentication system.
+
+After choosing a profile, **Forgot Password?** expands a new-password field.
+The reset accepts any non-blank password up to 1024 UTF-8 bytes and changes only
+that account's password; predictions and scores remain intact across events.
+Recovery deliberately requires no old password, email, or identity verification:
+any visitor can reset any existing account's password. It does not create
+accounts or sign the visitor in automatically, and existing bearer sessions
+remain valid under the unchanged honor-system authentication.

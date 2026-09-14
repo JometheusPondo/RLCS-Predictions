@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api, ApiClientError } from '../api/client';
+import { PasswordResetForm } from '../components/PasswordResetForm';
 import { setToken } from '../lib/auth';
 import { useEvent } from '../lib/events';
 
@@ -69,6 +70,8 @@ export function LandingPage() {
         <div className="space-y-3">
           <select
             value={selectedId}
+            aria-label="Profile"
+            disabled={loginMutation.isPending}
             onChange={(e) => {
               setSelectedId(e.target.value);
               if (!event.is_active) navigate(`/profile/${e.target.value}${eventSearch}`);
@@ -92,6 +95,8 @@ export function LandingPage() {
             <div className="space-y-2">
               <input
                 type="password"
+                aria-label="Password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => {
@@ -119,6 +124,7 @@ export function LandingPage() {
                       : 'Something went wrong.'}
                 </p>
               )}
+              <PasswordResetForm key={selectedId} participantId={selectedId} />
             </div>
           )}
         </div>

@@ -15,7 +15,7 @@ Examples:
 
 Any team without a matching file falls back gracefully:
   - On the leaderboard winner-pick strip: a text chip with the team name.
-  - On match cards: nothing (the team name text is already shown beside it).
+  - On match cards: team initials; unresolved slots show no logo.
 
 So partial coverage is fine — add logos as you collect them.
 
@@ -24,3 +24,12 @@ PNG with transparency, roughly square. They render at 24-28px.
 Note: this directory is `web/public/logos/`. Vite serves `web/public/` at the
 site root, so these files are reachable at `/logos/<name>.png`. Files placed
 under `web/src/` are NOT served — they're source code, not static assets.
+
+Worlds additions come directly from the broadcast sheet's Team Information tab:
+
+- [Bigodes](https://drive.google.com/open?id=13nFSOCBCuYSY0VctjTD2OGN2QUCJ8_F-)
+- [Virtus.pro](https://drive.google.com/open?id=13W9JAcYGCHYkDgBi9s__tNsf36AQT7RR)
+- [Team Falcons](https://drive.google.com/open?id=1qQa30Uv41EijtyZb5WDgdPJqkZ2rwXsy)
+
+Mate y Tapa and the independent side-event entrants have no logo link in that
+sheet and retain the initials fallback.

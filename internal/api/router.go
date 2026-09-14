@@ -63,6 +63,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/sync/status", s.syncStatus)
 
 		r.Post("/login", s.login)
+		r.Post("/reset-password", s.resetPassword)
 
 		r.Get("/participants", s.listParticipants)
 		// Self-registration is disabled for now: accounts are provisioned by

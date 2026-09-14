@@ -65,7 +65,7 @@ async function request<T>(path: string, init?: RequestInit, eventId?: number): P
     );
   }
 
-  // 204 No Content (currently only DELETE returns this).
+  // Endpoints without a response body return 204 No Content.
   if (res.status === 204) {
     return undefined as T;
   }
@@ -121,6 +121,12 @@ export const api = {
     request<LoginResponse>('/login', {
       method: 'POST',
       body: JSON.stringify({ participant_id: participantId, password }),
+    }),
+
+  resetPassword: (participantId: string, newPassword: string): Promise<void> =>
+    request<void>('/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ participant_id: participantId, new_password: newPassword }),
     }),
 
   // setWinnerPick appends a tournament-winner pick. Auth-gated server-side to
