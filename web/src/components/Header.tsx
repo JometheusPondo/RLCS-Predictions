@@ -21,8 +21,9 @@ export function Header() {
       <div className="mx-auto max-w-5xl px-4 py-3 flex flex-wrap gap-4 items-center justify-between">
         <Link
           to={`/${eventSearch}`}
-          className="text-lg font-semibold tracking-tight text-zinc-100 hover:text-white"
+          className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-100 hover:text-white"
         >
+          <img src="/logos/rlcs-logo.png" alt="" className="h-8 w-8 shrink-0 object-contain" />
           RLCS Predictions
         </Link>
         <label className="flex items-center gap-2 text-sm text-zinc-400">
