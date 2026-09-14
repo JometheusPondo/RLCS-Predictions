@@ -24,7 +24,7 @@ function EventRoutes() {
       <Header />
       {!event.is_active && (
         <div className="border-b border-amber-900/60 bg-amber-950/30 px-4 py-3 text-center text-sm text-amber-200">
-          {event.name} · Archive — predictions are read-only.
+          {event.name} · Archive
         </div>
       )}
       <Routes key={event.id}>
