@@ -104,13 +104,13 @@ export interface SideState {
 // accounts (The Coin, Chat — see isLockExempt in lib/auth), whose picks the
 // operator enters at any time. The server waives the lock for those accounts
 // in parallel, so the tap actually succeeds. Completed matches stay locked
-// regardless — a post-result correction is a rare operator-curl job, not a UI
-// flow, and a tappable green/red result card would just be confusing.
+// unless ownerOverride is enabled for the separate owner correction account.
 export function sideState(
   side: Pick,
   match: Match,
   userPick: Pick | null,
   bypassLock = false,
+  ownerOverride = false,
 ): SideState {
   const completed = match.status === 'completed';
   const resolved = Boolean(match.team_a && match.team_b && !match.placeholder_a && !match.placeholder_b);
@@ -118,15 +118,15 @@ export function sideState(
   if (!completed) {
     return {
       visual: userPick === side ? 'blue' : 'neutral',
-      tappable: resolved && (bypassLock || !match.locked),
+      tappable: ownerOverride || (resolved && (bypassLock || !match.locked)),
     };
   }
 
   const thisSideWon = match.winner === side;
   if (userPick === side) {
-    return { visual: thisSideWon ? 'green' : 'red', tappable: false };
+    return { visual: thisSideWon ? 'green' : 'red', tappable: ownerOverride };
   }
-  return { visual: thisSideWon ? 'winner-outline' : 'neutral', tappable: false };
+  return { visual: thisSideWon ? 'winner-outline' : 'neutral', tappable: ownerOverride };
 }
 
 // sideRingClass is the Tailwind ring utility for one side of a match card.

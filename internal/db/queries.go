@@ -54,7 +54,7 @@ var (
 // rules — a 4-way branch plus an underdog cross-participant pick count — don't
 // fit a readable inline query.
 func (db *EventStore) ListParticipants(ctx context.Context) ([]models.Participant, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, display_name FROM participants`)
+	rows, err := db.QueryContext(ctx, `SELECT id, display_name FROM participants WHERE id != ?`, models.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -309,8 +309,8 @@ func (db *EventStore) computeAllStats(ctx context.Context) (map[string]scoring.P
 func (db *EventStore) scoringPredictions(ctx context.Context) ([]scoring.PredictionRow, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT p.participant_id, p.match_id, p.pick FROM predictions p JOIN matches m ON m.id = p.match_id
-		JOIN rounds r ON r.id = m.round_id WHERE p.participant_id != ? AND r.tournament_id = ?`,
-		models.AdminID, db.tournamentID,
+		JOIN rounds r ON r.id = m.round_id WHERE p.participant_id NOT IN (?, ?) AND r.tournament_id = ?`,
+		models.AdminID, models.OwnerID, db.tournamentID,
 	)
 	if err != nil {
 		return nil, err
@@ -684,10 +684,10 @@ func (db *EventStore) checkPredictionWriteable(ctx context.Context, participantI
 	if match == nil {
 		return ErrNotFound
 	}
-	if match.TeamA == "" || match.TeamB == "" || match.PlaceholderA != nil || match.PlaceholderB != nil {
+	if !db.ownerOverride && (match.TeamA == "" || match.TeamB == "" || match.PlaceholderA != nil || match.PlaceholderB != nil) {
 		return ErrTeamsUnresolved
 	}
-	if match.Locked && !nonStandardParticipants[participantID] {
+	if match.Locked && !db.ownerOverride && !nonStandardParticipants[participantID] {
 		return ErrPredictionsLocked
 	}
 
@@ -716,7 +716,7 @@ func (db *EventStore) AddWinnerPick(ctx context.Context, participantID, teamName
 	if err := db.requireActive(ctx); err != nil {
 		return err
 	}
-	if !nonStandardParticipants[participantID] {
+	if !db.ownerOverride && !nonStandardParticipants[participantID] {
 		locked, err := db.winnerPicksLocked(ctx)
 		if err != nil {
 			return err

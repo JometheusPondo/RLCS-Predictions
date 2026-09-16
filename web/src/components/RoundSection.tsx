@@ -18,6 +18,7 @@ interface RoundSectionProps {
   // tappable even after they lock. Used for the lock-exempt accounts (The Coin,
   // Chat). No effect when readOnly is true.
   bypassLock?: boolean;
+  ownerOverride?: boolean;
   onViewPicks?: (match: Match) => void;
 }
 
@@ -30,6 +31,7 @@ export function RoundSection({
   onPick,
   readOnly = false,
   bypassLock = false,
+  ownerOverride = false,
   onViewPicks,
 }: RoundSectionProps) {
   const { event } = useEvent();
@@ -71,7 +73,7 @@ export function RoundSection({
               match={match}
               userPick={pickForMatch(match.id)}
               onPick={(side) => onPick(match.id, side)}
-              bypassLock={bypassLock}
+              bypassLock={bypassLock} ownerOverride={ownerOverride}
             />
           )}
           {match.locked && onViewPicks && bypassLock && match.status !== 'completed' && (

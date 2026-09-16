@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ApiClientError } from '../api/client';
 import { useEvent } from '../lib/events';
-import { useAuth, isLockExempt } from '../lib/auth';
+import { useAuth, isLockExempt, OWNER_ID } from '../lib/auth';
 import { DayMatches } from '../components/DayMatches';
 import { MatchPicksDrawer } from '../components/MatchPicksDrawer';
 import { SkeletonSection } from '../components/Skeleton';
@@ -25,10 +25,10 @@ export function ProfilePage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
 
-  // Editable only when you're logged in as the profile you're viewing. Viewing
-  // anyone else (or being anonymous) is read-only — and the server only returns
-  // their completed-match predictions anyway.
-  const canEdit = event.is_active && auth !== null && auth === id;
+  // The owner can correct any profile, including archived events.
+  // Ordinary participants can edit only their own active-event profile.
+  const ownerOverride = auth === OWNER_ID;
+  const canEdit = ownerOverride || (event.is_active && auth !== null && auth === id);
 
   // The Coin and Chat are lock-exempt accounts: when the operator is logged in
   // as one of them, its match cards stay tappable even after the day locks, so
@@ -36,7 +36,7 @@ export function ProfilePage() {
   // lock for these accounts in parallel (see lockExemptParticipants in
   // internal/db/queries.go), so the taps actually save. Completed matches stay
   // locked even here — a post-result correction is a rare operator job.
-  const bypassLock = canEdit && isLockExempt(id ?? null);
+  const bypassLock = ownerOverride || (canEdit && isLockExempt(id ?? null));
 
   // The participant query key includes the viewer's identity (auth). The server
   // filters predictions by who's asking — you only see other people's
@@ -91,6 +91,9 @@ export function ProfilePage() {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: participantKey });
+      void queryClient.invalidateQueries({ queryKey: ['participants'] });
+      void queryClient.invalidateQueries({ queryKey: ['matches'] });
+      void queryClient.invalidateQueries({ queryKey: ['simulation'] });
     },
   });
 
@@ -148,11 +151,12 @@ export function ProfilePage() {
   // change needed. The Coin and Chat stay editable, mirroring the prediction-
   // lock exemption and the server (see AddWinnerPick).
   const winnerPickLocked =
-    (matchesQuery.data ?? []).some((m) => m.locked) && !isLockExempt(id ?? null);
+    !ownerOverride && (matchesQuery.data ?? []).some((m) => m.locked) && !isLockExempt(id ?? null);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-6">
       <header>
+        {ownerOverride && <p className="mb-2 text-sm text-amber-300">Owner mode · All picks are editable. Tap a selected team again to clear its pick.</p>}
         <p className="mb-1 text-sm text-zinc-400">{event.name}</p>
         <h1 className="text-2xl font-semibold tracking-tight">
           {participantQuery.data?.display_name ?? 'Loading\u2026'}
@@ -253,8 +257,8 @@ export function ProfilePage() {
           pickForMatch={pickForMatch}
           onPick={handlePick}
           readOnly={!canEdit}
-          bypassLock={bypassLock}
-          onViewPicks={auth === id ? (match) => setSelectedMatchId(match.id) : undefined}
+          bypassLock={bypassLock} ownerOverride={ownerOverride}
+          onViewPicks={!ownerOverride && auth === id ? (match) => setSelectedMatchId(match.id) : undefined}
         />
       <MatchPicksDrawer
         match={matchesQuery.data?.find((match) => match.id === selectedMatchId) ?? null}

@@ -70,9 +70,13 @@ func isAdmin(r *http.Request) bool {
 	return requesterID(r) == models.AdminID
 }
 
+func isOwner(r *http.Request) bool {
+	return requesterID(r) == models.OwnerID
+}
+
 // canSeeAllPredictions reports whether the requester may see the target
 // participant's in-progress picks: true when viewing your own profile, or when
 // you are blast_admin. Everyone else sees only completed-match predictions.
 func canSeeAllPredictions(r *http.Request, targetID string) bool {
-	return requesterID(r) == targetID || isAdmin(r)
+	return requesterID(r) == targetID || isAdmin(r) || isOwner(r)
 }

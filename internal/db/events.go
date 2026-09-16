@@ -38,7 +38,8 @@ func (db *DB) BackupBeforeEventMigration(ctx context.Context, path string) (stri
 
 type EventStore struct {
 	*DB
-	tournamentID int
+	tournamentID  int
+	ownerOverride bool
 }
 
 // ForTournament returns an independent query scope; it never mutates the shared database handle.
@@ -105,7 +106,7 @@ func (db *EventStore) requireActive(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !event.IsActive {
+	if !event.IsActive && !db.ownerOverride {
 		return ErrEventReadOnly
 	}
 	return nil

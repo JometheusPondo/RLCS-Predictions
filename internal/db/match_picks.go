@@ -39,8 +39,8 @@ func (db *EventStore) ListMatchPickers(ctx context.Context, matchID string) ([]M
 		SELECT p.id, p.display_name, pr.pick
 		FROM predictions pr JOIN participants p ON p.id = pr.participant_id
 		JOIN matches m ON m.id = pr.match_id JOIN rounds r ON r.id = m.round_id
-		WHERE m.id = ? AND r.tournament_id = ? AND p.id != ?
-		ORDER BY p.display_name COLLATE NOCASE, p.id`, matchID, db.tournamentID, models.AdminID)
+		WHERE m.id = ? AND r.tournament_id = ? AND p.id NOT IN (?, ?)
+		ORDER BY p.display_name COLLATE NOCASE, p.id`, matchID, db.tournamentID, models.AdminID, models.OwnerID)
 	if err != nil {
 		return nil, err
 	}

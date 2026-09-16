@@ -13,6 +13,7 @@ interface MatchCardProps {
   // true. Used for the lock-exempt accounts (The Coin, Chat) so the operator
   // can set their picks at any time. Completed matches stay non-interactive.
   bypassLock?: boolean;
+  ownerOverride?: boolean;
 }
 
 // Tailwind background/text per SideVisual. Colors are from spec § 7.2; neutral
@@ -26,9 +27,9 @@ const visualClasses: Record<SideVisual, string> = {
   'winner-outline': 'bg-zinc-800 text-zinc-100',
 };
 
-export function MatchCard({ match, userPick, onPick, bypassLock = false }: MatchCardProps) {
-  const a = sideState('A', match, userPick, bypassLock);
-  const b = sideState('B', match, userPick, bypassLock);
+export function MatchCard({ match, userPick, onPick, bypassLock = false, ownerOverride = false }: MatchCardProps) {
+  const a = sideState('A', match, userPick, bypassLock, ownerOverride);
+  const b = sideState('B', match, userPick, bypassLock, ownerOverride);
 
   // Center shows the score once both are present, otherwise "vs".
   const center =

@@ -34,7 +34,7 @@ func (s *server) selectEvent(next http.Handler) http.Handler {
 			s.serverError(w, r, err)
 			return
 		}
-		if !event.IsActive && (r.Method == http.MethodPut || r.Method == http.MethodDelete) {
+		if !event.IsActive && !isOwner(r) && (r.Method == http.MethodPut || r.Method == http.MethodDelete) {
 			writeError(w, http.StatusForbidden, "event_read_only", "past events are read-only")
 			return
 		}
@@ -48,7 +48,11 @@ func (s *server) event(r *http.Request) *models.Tournament {
 }
 
 func (s *server) eventDB(r *http.Request) *db.EventStore {
-	return s.deps.DB.ForTournament(s.event(r).ID)
+	store := s.deps.DB.ForTournament(s.event(r).ID)
+	if isOwner(r) {
+		return store.WithOwnerOverride()
+	}
+	return store
 }
 
 func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {

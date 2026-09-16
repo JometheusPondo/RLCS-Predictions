@@ -1,3 +1,4 @@
+import { AdminLoginPage } from './pages/AdminLoginPage';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 
 import { Header } from './components/Header';
@@ -29,6 +30,7 @@ function EventRoutes() {
       )}
       <Routes key={event.id}>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route path="/profile/:id" element={<ProfilePage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="*" element={<NotFound />} />

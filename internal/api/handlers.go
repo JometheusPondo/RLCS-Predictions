@@ -270,7 +270,7 @@ type setWinnerPickReq struct {
 func (s *server) setWinnerPick(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if requesterID(r) != id && !isAdmin(r) {
+	if requesterID(r) != id && !isAdmin(r) && !isOwner(r) {
 		writeError(w, http.StatusForbidden, "forbidden", "you can only change your own winner pick")
 		return
 	}
@@ -351,7 +351,7 @@ func (s *server) setPrediction(w http.ResponseWriter, r *http.Request) {
 	pid := chi.URLParam(r, "id")
 	mid := chi.URLParam(r, "match_id")
 
-	if requesterID(r) != pid && !isAdmin(r) {
+	if requesterID(r) != pid && !isAdmin(r) && !isOwner(r) {
 		writeError(w, http.StatusForbidden, "forbidden", "you can only change your own predictions")
 		return
 	}
@@ -388,7 +388,7 @@ func (s *server) deletePrediction(w http.ResponseWriter, r *http.Request) {
 	pid := chi.URLParam(r, "id")
 	mid := chi.URLParam(r, "match_id")
 
-	if requesterID(r) != pid && !isAdmin(r) {
+	if requesterID(r) != pid && !isAdmin(r) && !isOwner(r) {
 		writeError(w, http.StatusForbidden, "forbidden", "you can only change your own predictions")
 		return
 	}

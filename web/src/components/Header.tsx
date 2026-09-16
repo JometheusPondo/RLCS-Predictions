@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 
-import { clearToken, useAuth } from '../lib/auth';
+import { clearToken, useAuth, OWNER_ID } from '../lib/auth';
 import { useEvent } from '../lib/events';
 
 // Header renders on every route. When logged in it shows a direct link to your
@@ -38,8 +38,8 @@ export function Header() {
           </Link>
           {token ? (
             <>
-              <Link to={`/profile/${token}${eventSearch}`} className="hover:text-white">
-                My Picks
+              <Link to={token === OWNER_ID ? `/leaderboard${eventSearch}` : `/profile/${token}${eventSearch}`} className="hover:text-white">
+                {token === OWNER_ID ? 'Manage Picks' : 'My Picks'}
               </Link>
               <button type="button" onClick={handleLogout} className="hover:text-white">
                 Log out

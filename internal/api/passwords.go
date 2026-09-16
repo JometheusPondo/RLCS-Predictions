@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jometheuspondo/rlcs-predictions/internal/db"
+	"github.com/jometheuspondo/rlcs-predictions/internal/models"
 )
 
 type resetPasswordReq struct {
@@ -31,6 +32,10 @@ func (s *server) resetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.ParticipantID = strings.TrimSpace(req.ParticipantID)
+	if req.ParticipantID == models.OwnerID {
+		writeError(w, http.StatusForbidden, "reset_disabled", "password reset is disabled for this account")
+		return
+	}
 	if req.ParticipantID == "" {
 		writeError(w, http.StatusBadRequest, "invalid_participant_id", "select an account first")
 		return

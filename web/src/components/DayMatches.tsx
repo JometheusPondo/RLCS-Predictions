@@ -8,17 +8,18 @@ interface DayMatchesProps {
   onPick?: (id: string, side: Pick) => void;
   readOnly?: boolean;
   bypassLock?: boolean;
+  ownerOverride?: boolean;
   onViewPicks?: (match: Match) => void;
 }
 
-export function DayMatches({ matches, pickForMatch, onPick, readOnly = true, bypassLock = false, onViewPicks }: DayMatchesProps) {
+export function DayMatches({ matches, pickForMatch, onPick, readOnly = true, bypassLock = false, ownerOverride = false, onViewPicks }: DayMatchesProps) {
   return (
     <div className="space-y-10">
       {groupMatchesByDay(matches).map((day) => (
         <section key={day.date} className="space-y-5">
           <h2 className="border-b border-zinc-700 pb-3 text-xl font-semibold tracking-tight text-zinc-100">{day.title}</h2>
           {day.rounds.map((group) => (
-            <RoundSection key={group.round.name} group={group} pickForMatch={pickForMatch} onPick={(id, side) => onPick?.(id, side)} readOnly={readOnly} bypassLock={bypassLock} onViewPicks={onViewPicks} />
+            <RoundSection key={group.round.name} group={group} pickForMatch={pickForMatch} onPick={(id, side) => onPick?.(id, side)} readOnly={readOnly} bypassLock={bypassLock} ownerOverride={ownerOverride} onViewPicks={onViewPicks} />
           ))}
         </section>
       ))}

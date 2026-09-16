@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '../api/client';
 import { useEvent } from '../lib/events';
-import { ADMIN_ID, useAuth } from '../lib/auth';
+import { ADMIN_ID, OWNER_ID, useAuth } from '../lib/auth';
 import { Drawer } from '../components/Drawer';
 import { DayMatches } from '../components/DayMatches';
 import { SkeletonRow } from '../components/Skeleton';
@@ -34,7 +35,9 @@ function formatDay(iso: string): string {
 // all their picks for the day hit or miss. The projection is an annotation
 // only — the leaderboard itself is always ordered by real points.
 export function LeaderboardPage() {
-  const { event } = useEvent();
+  const { event, eventSearch } = useEvent();
+  const navigate = useNavigate();
+  const ownerOverride = useAuth() === OWNER_ID;
   const participantsQuery = useQuery({
     queryKey: ['participants', event.id],
     queryFn: () => api.getParticipants(event.id),
@@ -94,6 +97,7 @@ export function LeaderboardPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-6">
       <h1 className="text-2xl font-semibold tracking-tight">Leaderboard</h1>
+      {ownerOverride && <p className="text-sm text-amber-300">Owner mode · Select a participant to edit their picks.</p>}
       <p className="mt-1 text-sm text-zinc-400">{event.name}{event.is_active ? ' · All formats' : ' · Archived results'}</p>
       {!event.is_active && matchesQuery.data && completedCount === 0 && (
         <p className="mt-4 rounded-md border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-400">No completed results are stored for this event in this database.</p>
@@ -134,7 +138,7 @@ export function LeaderboardPage() {
               participant={p}
               completedCount={completedCount}
               sim={simByID.get(p.id)}
-              onClick={() => setSelectedId(p.id)}
+              onClick={() => ownerOverride ? navigate(`/profile/${p.id}${eventSearch}`) : setSelectedId(p.id)}
             />
           ))}
         </ol>

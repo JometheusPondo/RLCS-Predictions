@@ -3,6 +3,9 @@
 // All JSON tags are aligned with the response shapes in spec § 6.
 package models
 
+// OwnerID is the private correction account, separate from BLAST's viewer.
+const OwnerID = "owner_admin"
+
 // Match status values. Strings (not a named type) to keep db Scan / json marshal painless.
 const (
 	StatusUpcoming  = "upcoming"

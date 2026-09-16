@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api, ApiClientError } from '../api/client';
@@ -129,6 +129,7 @@ export function LandingPage() {
           )}
         </div>
       )}
+    <Link to={`/admin/login${eventSearch}`} className="fixed bottom-3 right-4 text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-300">Admin Login</Link>
     </main>
   );
 }

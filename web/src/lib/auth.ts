@@ -13,6 +13,7 @@ const AUTH_EVENT = 'rlcs-auth-change';
 // landing-page dropdown (so it must appear there), but is filtered out of the
 // leaderboard. Must stay in sync with models.AdminID on the Go side.
 export const ADMIN_ID = 'blast_admin';
+export const OWNER_ID = 'owner_admin';
 
 // LOCK_EXEMPT_IDS are the special, non-standard leaderboard accounts — "The
 // Coin" (a coin-flip benchmark) and "Chat" (a chat-vote benchmark) — whose

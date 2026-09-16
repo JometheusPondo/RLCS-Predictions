@@ -63,7 +63,7 @@ Scores, correct-pick counts, team choices, projections, champion picks, and
 prediction lists are scoped to the selected event. URLs preserve the selection
 with `?event=<id>`, and frontend caches include both event and viewer identities.
 Unknown event IDs fail explicitly. Archive writes are rejected on the server,
-even for admin, Coin, and Chat. Active-event writes cannot target archived matches.
+even for BLAST Admin, Coin, and Chat; the separate owner account can correct archives. Active-event writes cannot target archived matches.
 
 On My Picks, tap a locked match to open a sidebar listing each team's pickers.
 Coin and Chat retain their editable buttons and use a separate View predictions
@@ -169,6 +169,21 @@ After choosing a profile, **Forgot Password?** expands a new-password field.
 The reset accepts any non-blank password up to 1024 UTF-8 bytes and changes only
 that account's password; predictions and scores remain intact across events.
 Recovery deliberately requires no old password, email, or identity verification:
-any visitor can reset any existing account's password. It does not create
+any visitor can reset an ordinary account's password. The owner account is excluded. It does not create
 accounts or sign the visitor in automatically, and existing bearer sessions
 remain valid under the unchanged honor-system authentication.
+
+## Owner corrections
+
+The small **Admin Login** link at the bottom right of the landing page opens
+the separate `owner_admin` login. After signing in, select a participant on
+the leaderboard to add, change, or clear picks, including completed matches
+and archived events. Tournament-winner picks can also be changed after locking.
+Scores and underdog bonuses reflect the corrected picks automatically.
+
+Migration 006 provisions this account on startup. It is hidden from participant
+lists and excluded from scoring; password reset is disabled in the API and
+absent from its login page. BLAST Admin remains unchanged. Authentication uses
+the existing honor-system participant-ID tokens. Owner edits retain participant,
+match, event membership, and pick-value validation, but bypass timing and
+unresolved-team restrictions; placeholder picks refer to the displayed A/B slots.
