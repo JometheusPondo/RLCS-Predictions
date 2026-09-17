@@ -51,10 +51,10 @@ and live cards remain editable after normal locks; the API also permits
 post-result corrections. Completed cards remain read-only in the UI.
 `blast_admin` is excluded from scoring and the leaderboard.
 
-Play-ins lock individually at their published start or once marked live, so
-later rounds can be picked after opponents resolve. Other non-final days lock
-at the earliest published match start for that day. Championship Sunday locks
-match by match when play is reported. Champion picks lock when any match locks;
+Every stage locks match by match when the site imports the first nonzero game
+score from the broadcast sheet. Scheduled start times and other matches never
+lock an upcoming match. Later rounds can be picked after opponents resolve.
+Champion picks lock when any match locks;
 Coin and Chat retain their existing exemption. Before completion, other people's
 picks are hidden from ordinary viewers; their own picks and admin views remain
 available. Archived events expose saved picks for read-only viewing.
@@ -98,7 +98,7 @@ pnpm --dir web lint
 ```
 
 Tests cover migration preservation, consistent backups, event isolation,
-archived API write rejection, Coin/Chat exemptions, venue-day locking, source
+archived API write rejection, Coin/Chat exemptions, per-match locking, source
 validation, stable match IDs across team resolution, and all match formats.
 
 ## Upgrading the deployed Major site
