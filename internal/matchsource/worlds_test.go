@@ -112,6 +112,23 @@ func TestWorldsRejectsBrokenScheduleAndMissingMatches(t *testing.T) {
 	}
 }
 
+func TestWorldsScheduleOverwrittenMatchLetterHeader(t *testing.T) {
+	tabs := worldsFixtures(t)
+	tabs[4][0][12] = "f" // Live sheet on September 20.
+	// The left-hand block must not replace the authoritative right-hand times.
+	tabs[4][1][9] = "1:00 PM"
+	matches := parseWorldsFixtures(t, tabs, 2)
+	for _, m := range matches {
+		if m.ID == sheetMatchID(2, models.StagePlayIn, "AA") {
+			if m.ScheduledAt == nil || *m.ScheduledAt != "2026-09-15T16:00:00Z" {
+				t.Fatalf("did not retain right-hand schedule: %+v", m)
+			}
+			return
+		}
+	}
+	t.Fatal("missing first play-in match")
+}
+
 func TestWorldsSideEventCompletionUsesBestOfSeven(t *testing.T) {
 	tabs := worldsFixtures(t)
 	tabs[3][22][6], tabs[3][23][6] = "3", "2"

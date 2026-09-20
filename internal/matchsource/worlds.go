@@ -245,14 +245,23 @@ func overlayWorldsSchedule(matches []models.Match, rows [][]string, tournamentID
 	}
 	base, startCol := -1, -1
 	for col, header := range rows[0] {
-		if strings.TrimSpace(header) == "Match Letter" {
-			base = col
+		if strings.TrimSpace(header) != "Scheduled Start (CT)" || col < 9 {
+			continue
 		}
-		if strings.TrimSpace(header) == "Scheduled Start (CT)" {
-			startCol = col
+		// The match-letter heading can be accidentally overwritten (the live
+		// sheet has used "f"). Identify the block by its other stable headers
+		// instead, keeping the rightmost published block authoritative.
+		candidate := col - 9
+		stageHeader := strings.TrimSpace(cellInRow(rows[0], candidate+2))
+		if strings.TrimSpace(cellInRow(rows[0], candidate+1)) != "Day/Stream" ||
+			(stageHeader != "Stage" && stageHeader != "Date/Stage") ||
+			strings.TrimSpace(cellInRow(rows[0], candidate+4)) != "Team 1" ||
+			strings.TrimSpace(cellInRow(rows[0], candidate+7)) != "Team 2" {
+			return fmt.Errorf("Worlds schedule block at column %d has unrecognized headers", candidate+1)
 		}
+		base, startCol = candidate, col
 	}
-	if base < 0 || startCol != base+9 {
+	if base < 0 {
 		return fmt.Errorf("Worlds schedule headers changed")
 	}
 	zone, err := time.LoadLocation("America/Chicago")
