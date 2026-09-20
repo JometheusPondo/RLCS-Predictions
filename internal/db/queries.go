@@ -295,7 +295,17 @@ func (db *EventStore) computeAllStats(ctx context.Context) (map[string]scoring.P
 	if err != nil {
 		return nil, err
 	}
-	return scoring.ComputeStats(matches, preds), nil
+	participants, err := db.championParticipants(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stats := scoring.ComputeStats(matches, preds)
+	for id, bonus := range scoring.ChampionBonuses(matches, participants) {
+		s := stats[id]
+		s.Score += bonus
+		stats[id] = s
+	}
+	return stats, nil
 }
 
 // scoringPredictions returns every prediction as a scoring.PredictionRow,

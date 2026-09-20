@@ -76,14 +76,14 @@ func Compute(matches []models.Match, preds []scoring.PredictionRow, participants
 	picksByParticipant := indexPicks(preds)
 
 	// Baseline standings — the real, no-hypothetical scores.
-	currentPos := positions(real, scoring.ComputeScores(matches, preds))
+	currentPos := positions(real, scoring.ComputeScoresWithChampion(matches, preds, real))
 
 	results = make([]Result, 0, len(real))
 	for _, p := range real {
 		picks := picksByParticipant[p.ID]
 
-		bestPos := positions(real, scenarioScores(matches, dayMatches, preds, picks, true))
-		worstPos := positions(real, scenarioScores(matches, dayMatches, preds, picks, false))
+		bestPos := positions(real, scenarioScores(matches, dayMatches, preds, picks, true, real))
+		worstPos := positions(real, scenarioScores(matches, dayMatches, preds, picks, false, real))
 
 		results = append(results, Result{
 			ParticipantID:  p.ID,
@@ -158,7 +158,7 @@ func indexPicks(preds []scoring.PredictionRow) map[string]map[string]string {
 // dayPicks is that participant's picks (match_id → side). best=true resolves
 // each of their day matches their way; best=false resolves them the opposite
 // way. Day matches the participant didn't pick are left unresolved.
-func scenarioScores(allMatches, dayMatches []models.Match, preds []scoring.PredictionRow, dayPicks map[string]string, best bool) map[string]int {
+func scenarioScores(allMatches, dayMatches []models.Match, preds []scoring.PredictionRow, dayPicks map[string]string, best bool, participants []models.Participant) map[string]int {
 	// Decide the hypothetical winner for each resolved day match.
 	winners := make(map[string]string) // match_id → winning side
 	for _, m := range dayMatches {
@@ -192,7 +192,7 @@ func scenarioScores(allMatches, dayMatches []models.Match, preds []scoring.Predi
 		modified[i].TeamAScore = nil
 		modified[i].TeamBScore = nil
 	}
-	return scoring.ComputeScores(modified, preds)
+	return scoring.ComputeScoresWithChampion(modified, preds, participants)
 }
 
 // opposite returns the other side.

@@ -18,7 +18,13 @@ The site imports the public [Worlds broadcast sheet](https://docs.google.com/spr
 
 All 53 matches count toward one Worlds leaderboard. Play-ins and groups are
 best of five; playoffs, 1v1, and 2v2 are best of seven. The champion selector
-remains a 3v3 tournament-winner pick; it does not award points.
+remains a 3v3 tournament-winner pick. Once the 3v3 grand final is completed,
+each correct champion picker receives `floor(0.5 × other participants who
+did not pick that champion)` additional points. Only each person's latest
+event-specific winner pick counts. People with no winner pick count as not
+picking the champion. Coin, Chat, and both admin accounts are excluded entirely
+from this bonus and its participant count. For example, one correct picker
+among 14 eligible participants receives `floor(0.5 × 13) = 6` points.
 
 Matches are grouped by venue calendar day, Tuesday September 15 through Sunday
 September 20, then by round. Times use `America/Chicago`, including daylight
